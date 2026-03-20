@@ -1,0 +1,38 @@
+{
+  "enabledMcpjsonServers": ["github"],
+  "hooks": {
+    "Stop": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "echo '\\n--- StreamForge: Last 5 commits ---' && git -C \"C:\\Users\\sakshi.kataria\\Desktop\\Claude Demo\" log --oneline -5 2>/dev/null || echo '(no git repo found)'"
+          }
+        ]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node -e \"let d=''; process.stdin.on('data',c=>d+=c); process.stdin.on('end',()=>{ try { const input=JSON.parse(d); const fp=input.tool_input&&input.tool_input.file_path||''; if(/STREAMFORGE\\.md$/i.test(fp)){ console.error('BLOCKED: Direct writes to STREAMFORGE.md are not allowed. This is the single source of truth. Update it intentionally via a documented decision.'); process.exit(1); } } catch(e){} });\""
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node -e \"let d=''; process.stdin.on('data',c=>d+=c); process.stdin.on('end',()=>{ try { const input=JSON.parse(d); const fp=input.tool_input&&input.tool_input.file_path||''; if(/\\.(ts|tsx|js|jsx)$/.test(fp)){ const {execSync}=require('child_process'); try { execSync('npx eslint \"'+fp+'\" --max-warnings=0',{stdio:'inherit'}); } catch(e){process.exit(1);} } } catch(e){} });\""
+          }
+        ]
+      }
+    ]
+  }
+}
