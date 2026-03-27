@@ -1,132 +1,102 @@
-const { S3Client, PutObjectCommand } = require('@aws-sdk/client-s3');
-const { getSignedUrl } = require('@aws-sdk/s3-request-presigner');
-const cloudinary = require('cloudinary').v2;
+const path = require('path');
+const fs = require('fs');
+const { v4: uuidv4 } = require('uuid');
+const multer = require('multer');
 const Video = require('../models/Video.model');
+const WatchHistory = require('../models/WatchHistory.model');
+const Notification = require('../models/Notification.model');
+const Subscription = require('../models/Subscription.model');
 
-cloudinary.config({
-  cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
-  api_key: process.env.CLOUDINARY_API_KEY,
-  api_secret: process.env.CLOUDINARY_API_SECRET,
-});
+// ── Multer storage config ──────────────────────────────────────────
+const uploadDir = path.join(__dirname, '../../uploads');
+if (!fs.existsSync(uploadDir)) fs.mkdirSync(uploadDir, { recursive: true });
 
-const s3 = new S3Client({
-  region: process.env.AWS_REGION,
-  credentials: {
-    accessKeyId: process.env.AWS_ACCESS_KEY_ID,
-    secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY,
+const storage = multer.diskStorage({
+  destination: (req, file, cb) => cb(null, uploadDir),
+  filename: (req, file, cb) => {
+    const ext = path.extname(file.originalname);
+    cb(null, `${uuidv4()}${ext}`);
   },
 });
 
-exports.getUploadUrl = async (req, res) => {
-  try {
-    const { filename, contentType } = req.body;
-
-    if (!filename || !contentType) {
-      return res.status(400).json({
-        success: false,
-        error: { code: 'MISSING_FIELDS', message: 'filename and contentType are required' },
-      });
-    }
-
-    const s3Key = `videos/${req.user.id}/${Date.now()}-${filename}`;
-    const bucket = process.env.AWS_S3_BUCKET;
-
-    const command = new PutObjectCommand({
-      Bucket: bucket,
-      Key: s3Key,
-      ContentType: contentType,
-    });
-
-    const uploadUrl = await getSignedUrl(s3, command, { expiresIn: 300 });
-
-    res.json({ success: true, data: { uploadUrl, s3Key, bucket } });
-  } catch (err) {
-    res.status(500).json({ success: false, error: { message: err.message } });
+const fileFilter = (req, file, cb) => {
+  if (file.mimetype.startsWith('video/') || file.mimetype.startsWith('image/')) {
+    cb(null, true);
+  } else {
+    cb(new Error('Only video or image files are allowed'), false);
   }
 };
 
-exports.createVideo = async (req, res) => {
-  try {
-    const { title, description, s3Key, s3Bucket } = req.body;
+// 500 MB max
+const upload = multer({ storage, fileFilter, limits: { fileSize: 500 * 1024 * 1024 } });
+exports.upload = upload;
+exports.uploadFields = upload.fields([
+  { name: 'video', maxCount: 1 },
+  { name: 'thumbnail', maxCount: 1 },
+]);
 
-    if (!title || !s3Key || !s3Bucket) {
+// ── Controllers ───────────────────────────────────────────────────
+
+// POST /api/v1/videos  (multipart/form-data: file, title, description)
+exports.uploadVideo = async (req, res) => {
+  try {
+    const videoFile = req.files?.['video']?.[0];
+    const thumbnailFile = req.files?.['thumbnail']?.[0];
+
+    if (!videoFile) {
       return res.status(400).json({
         success: false,
-        error: { code: 'MISSING_FIELDS', message: 'title, s3Key, and s3Bucket are required' },
+        error: { code: 'NO_FILE', message: 'Video file is required' },
       });
     }
 
+    const { title, description } = req.body;
+    if (!title || !title.trim()) {
+      fs.unlinkSync(videoFile.path);
+      if (thumbnailFile) fs.unlinkSync(thumbnailFile.path);
+      return res.status(400).json({
+        success: false,
+        error: { code: 'NO_TITLE', message: 'Title is required' },
+      });
+    }
+
+    const baseUrl = process.env.BASE_URL || `http://localhost:${process.env.PORT || 5000}`;
+    const fileUrl = `${baseUrl}/uploads/${videoFile.filename}`;
+    const thumbnailUrl = thumbnailFile ? `${baseUrl}/uploads/${thumbnailFile.filename}` : undefined;
+
     const video = await Video.create({
-      title,
-      description: description || '',
+      title: title.trim(),
+      description: description?.trim() || '',
       owner: req.user.id,
-      s3Key,
-      s3Bucket,
-      status: 'pending',
+      filePath: videoFile.path,
+      fileUrl,
+      ...(thumbnailUrl && { thumbnailUrl }),
+      status: 'ready',
     });
 
-    // Trigger Cloudinary transcoding asynchronously (do not await)
-    const s3Url = `https://${s3Bucket}.s3.amazonaws.com/${s3Key}`;
-    cloudinary.uploader
-      .upload(s3Url, {
-        resource_type: 'video',
-        public_id: video._id.toString(),
-        eager: [{ quality: 'auto', format: 'mp4' }],
-        eager_async: true,
-      })
-      .then(async (result) => {
-        await Video.findByIdAndUpdate(video._id, {
-          status: 'ready',
-          cloudinaryPublicId: result.public_id,
-          thumbnailUrl: result.secure_url.replace('/upload/', '/upload/so_0/').replace('.mp4', '.jpg'),
-          duration: Math.round(result.duration || 0),
-        });
-      })
-      .catch(async () => {
-        // Leave as processing — a webhook or retry job would handle this in production
-      });
+    await video.populate('owner', 'name');
 
-    video.status = 'processing';
-    video.cloudinaryPublicId = video._id.toString();
-    await video.save();
+    // Notify all subscribers of this creator
+    const subs = await Subscription.find({ creator: req.user.id }).select('subscriber');
+    if (subs.length > 0) {
+      const notifications = subs.map((s) => ({
+        recipient: s.subscriber,
+        type: 'new_upload',
+        actor: req.user.id,
+        video: video._id,
+      }));
+      await Notification.insertMany(notifications);
+    }
 
     res.status(201).json({ success: true, data: video });
   } catch (err) {
+    if (req.files?.['video']?.[0]) fs.unlinkSync(req.files['video'][0].path);
+    if (req.files?.['thumbnail']?.[0]) fs.unlinkSync(req.files['thumbnail'][0].path);
     res.status(500).json({ success: false, error: { message: err.message } });
   }
 };
 
-exports.getVideoStatus = async (req, res) => {
-  try {
-    const video = await Video.findById(req.params.id).select('status thumbnailUrl cloudinaryPublicId owner');
-
-    if (!video) {
-      return res.status(404).json({
-        success: false,
-        error: { code: 'NOT_FOUND', message: 'Video not found' },
-      });
-    }
-
-    if (video.owner.toString() !== req.user.id.toString()) {
-      return res.status(403).json({
-        success: false,
-        error: { code: 'FORBIDDEN', message: 'Access denied' },
-      });
-    }
-
-    res.json({
-      success: true,
-      data: {
-        status: video.status,
-        thumbnailUrl: video.thumbnailUrl,
-        cloudinaryPublicId: video.cloudinaryPublicId,
-      },
-    });
-  } catch (err) {
-    res.status(500).json({ success: false, error: { message: err.message } });
-  }
-};
-
+// GET /api/v1/videos  (public)
 exports.getVideos = async (req, res) => {
   try {
     const page = Math.max(1, parseInt(req.query.page) || 1);
@@ -146,6 +116,127 @@ exports.getVideos = async (req, res) => {
       success: true,
       data: { videos, total, page, totalPages: Math.ceil(total / limit) },
     });
+  } catch (err) {
+    res.status(500).json({ success: false, error: { message: err.message } });
+  }
+};
+
+// GET /api/v1/videos/:id  (public — stream or direct URL)
+exports.getVideo = async (req, res) => {
+  try {
+    const video = await Video.findById(req.params.id).populate('owner', 'name');
+    if (!video) {
+      return res.status(404).json({ success: false, error: { message: 'Video not found' } });
+    }
+    await Video.findByIdAndUpdate(req.params.id, { $inc: { views: 1 } });
+
+    // Record watch history for authenticated users
+    const userId = req.user?.id;
+    if (userId) {
+      await WatchHistory.findOneAndUpdate(
+        { user: userId, video: req.params.id },
+        { watchedAt: new Date() },
+        { upsert: true }
+      );
+    }
+    const videoObj = video.toObject();
+    videoObj.likesCount = video.likes.length;
+    videoObj.dislikesCount = video.dislikes.length;
+    videoObj.liked = userId ? video.likes.map(String).includes(userId) : false;
+    videoObj.disliked = userId ? video.dislikes.map(String).includes(userId) : false;
+    res.json({ success: true, data: videoObj });
+  } catch (err) {
+    res.status(500).json({ success: false, error: { message: err.message } });
+  }
+};
+
+// GET /api/v1/users/:userId/videos  (public — user's uploaded videos)
+exports.getUserVideos = async (req, res) => {
+  try {
+    const videos = await Video.find({ owner: req.params.userId, status: 'ready' })
+      .sort({ createdAt: -1 })
+      .populate('owner', 'name');
+    res.json({ success: true, data: videos });
+  } catch (err) {
+    res.status(500).json({ success: false, error: { message: err.message } });
+  }
+};
+
+// POST /api/v1/videos/:id/like  (toggle like)
+exports.likeVideo = async (req, res) => {
+  try {
+    const video = await Video.findById(req.params.id);
+    if (!video) return res.status(404).json({ success: false, error: { message: 'Video not found' } });
+
+    const userId = req.user.id;
+    const alreadyLiked = video.likes.map(String).includes(userId);
+    if (alreadyLiked) {
+      video.likes.pull(userId);
+    } else {
+      video.likes.addToSet(userId);
+      video.dislikes.pull(userId);
+    }
+    await video.save();
+    res.json({ success: true, data: { likes: video.likes.length, dislikes: video.dislikes.length, liked: !alreadyLiked, disliked: false } });
+  } catch (err) {
+    res.status(500).json({ success: false, error: { message: err.message } });
+  }
+};
+
+// POST /api/v1/videos/:id/dislike  (toggle dislike)
+exports.dislikeVideo = async (req, res) => {
+  try {
+    const video = await Video.findById(req.params.id);
+    if (!video) return res.status(404).json({ success: false, error: { message: 'Video not found' } });
+
+    const userId = req.user.id;
+    const alreadyDisliked = video.dislikes.map(String).includes(userId);
+    if (alreadyDisliked) {
+      video.dislikes.pull(userId);
+    } else {
+      video.dislikes.addToSet(userId);
+      video.likes.pull(userId);
+    }
+    await video.save();
+    res.json({ success: true, data: { likes: video.likes.length, dislikes: video.dislikes.length, liked: false, disliked: !alreadyDisliked } });
+  } catch (err) {
+    res.status(500).json({ success: false, error: { message: err.message } });
+  }
+};
+
+// PUT /api/v1/videos/:id  (owner only)
+exports.updateVideo = async (req, res) => {
+  try {
+    const video = await Video.findById(req.params.id);
+    if (!video) return res.status(404).json({ success: false, error: { message: 'Video not found' } });
+    if (video.owner.toString() !== req.user.id.toString()) {
+      return res.status(403).json({ success: false, error: { message: 'Access denied' } });
+    }
+    const { title, description } = req.body;
+    if (title !== undefined) video.title = title.trim();
+    if (description !== undefined) video.description = description.trim();
+    await video.save();
+    await video.populate('owner', 'name');
+    res.json({ success: true, data: video });
+  } catch (err) {
+    res.status(500).json({ success: false, error: { message: err.message } });
+  }
+};
+
+// DELETE /api/v1/videos/:id  (owner only)
+exports.deleteVideo = async (req, res) => {
+  try {
+    const video = await Video.findById(req.params.id);
+    if (!video) {
+      return res.status(404).json({ success: false, error: { message: 'Video not found' } });
+    }
+    if (video.owner.toString() !== req.user.id.toString()) {
+      return res.status(403).json({ success: false, error: { message: 'Access denied' } });
+    }
+    // Delete file from disk
+    if (fs.existsSync(video.filePath)) fs.unlinkSync(video.filePath);
+    await video.deleteOne();
+    res.status(204).send();
   } catch (err) {
     res.status(500).json({ success: false, error: { message: err.message } });
   }

@@ -1,0 +1,10 @@
+{
+  "/upload/page": "app/upload/page.js",
+  "/page": "app/page.js",
+  "/videos/[id]/page": "app/videos/[id]/page.js",
+  "/feed/page": "app/feed/page.js",
+  "/history/page": "app/history/page.js",
+  "/profile/page": "app/profile/page.js",
+  "/saved/page": "app/saved/page.js",
+  "/login/page": "app/login/page.js"
+}

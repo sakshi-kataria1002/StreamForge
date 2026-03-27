@@ -19,40 +19,38 @@ const videoSchema = new mongoose.Schema(
       ref: 'User',
       required: true,
     },
-    s3Key: {
+    filePath: {
       type: String,
-      required: true,
+      required: true, // relative path on disk e.g. "uploads/abc123.mp4"
     },
-    s3Bucket: {
+    fileUrl: {
       type: String,
-      required: true,
-    },
-    cloudinaryPublicId: {
-      type: String,
-      default: null,
-    },
-    status: {
-      type: String,
-      enum: ['pending', 'processing', 'ready'],
-      default: 'pending',
-    },
-    duration: {
-      type: Number,
-      default: 0,
+      required: true, // public URL e.g. "http://localhost:5000/uploads/abc123.mp4"
     },
     thumbnailUrl: {
       type: String,
       default: null,
     },
+    status: {
+      type: String,
+      enum: ['ready'],
+      default: 'ready',
+    },
+    duration: {
+      type: Number,
+      default: 0,
+    },
     views: {
       type: Number,
       default: 0,
     },
+    likes: [{ type: mongoose.Schema.Types.ObjectId, ref: 'User' }],
+    dislikes: [{ type: mongoose.Schema.Types.ObjectId, ref: 'User' }],
   },
   { timestamps: true }
 );
 
 videoSchema.index({ owner: 1 });
-videoSchema.index({ status: 1, createdAt: -1 });
+videoSchema.index({ createdAt: -1 });
 
 module.exports = mongoose.model('Video', videoSchema);
