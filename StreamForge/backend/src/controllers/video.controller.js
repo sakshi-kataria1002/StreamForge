@@ -119,15 +119,20 @@ exports.getVideos = async (req, res) => {
     const limit = Math.min(100, parseInt(req.query.limit) || 20);
     const skip = (page - 1) * limit;
 
-    const filter = { status: 'ready', $or: [{ scheduledAt: null }, { scheduledAt: { $lte: new Date() } }] };
+    const filter = { status: 'ready', $and: [{ $or: [{ scheduledAt: null }, { scheduledAt: { $lte: new Date() } }] }] };
+
+    // Exclude the requesting user's own videos (for home/browse feed)
+    if (req.query.excludeOwner) {
+      filter.$and.push({ owner: { $ne: req.query.excludeOwner } });
+    }
 
     if (req.query.q) {
       const safe = req.query.q.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
       const re = { $regex: safe, $options: 'i' };
-      filter.$or = [{ title: re }, { description: re }, { tags: re }];
+      filter.$and.push({ $or: [{ title: re }, { description: re }, { tags: re }] });
     }
-    if (req.query.category) filter.category = req.query.category;
-    if (req.query.tag)      filter.tags = req.query.tag;
+    if (req.query.category) filter.$and.push({ category: req.query.category });
+    if (req.query.tag)      filter.$and.push({ tags: req.query.tag });
     if (req.query.duration === 'short')  filter.duration = { $gt: 0, $lt: 240 };
     if (req.query.duration === 'medium') filter.duration = { $gte: 240, $lte: 1200 };
     if (req.query.duration === 'long')   filter.duration = { $gt: 1200 };

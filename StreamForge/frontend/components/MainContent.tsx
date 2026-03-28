@@ -13,8 +13,8 @@ export default function MainContent({ children }: { children: React.ReactNode })
   useEffect(() => setMounted(true), []);
 
   return (
-    // lg:ml-56 — only offset on desktop where the fixed sidebar is always visible
-    <main className={`transition-all duration-300 ${mounted && user ? 'lg:ml-56' : ''}`}>
+    // lg:ml-64 — only offset on desktop where the fixed sidebar is always visible
+    <main className={`transition-all duration-300 ${mounted && user ? 'lg:ml-64' : ''}`}>
       {children}
     </main>
   );

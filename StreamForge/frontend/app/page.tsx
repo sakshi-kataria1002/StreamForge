@@ -7,7 +7,7 @@ import { getVideos, Video } from '../lib/api/video.api';
 import VideoCard from '../components/features/videos/VideoCard';
 
 interface RootState {
-  auth: { user: { id: string; name: string } | null };
+  auth: { user: { id: string; name: string } | null; accessToken: string | null };
 }
 
 function formatViews(n: number) {
@@ -28,16 +28,16 @@ function VideoSkeleton() {
   );
 }
 
-function AuthenticatedHome({ userName }: { userName: string }) {
+function AuthenticatedHome({ userName, userId }: { userName: string; userId: string }) {
   const [videos, setVideos] = useState<Video[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    getVideos({ page: 1 })
+    getVideos({ page: 1, excludeOwner: userId })
       .then((res) => setVideos(res.videos))
       .catch(() => setVideos([]))
       .finally(() => setLoading(false));
-  }, []);
+  }, [userId]);
 
   const featured = videos[0] ?? null;
   const rest = videos.slice(1);
@@ -224,7 +224,7 @@ export default function HomePage() {
 
   if (!mounted) return null;
 
-  if (user) return <AuthenticatedHome userName={user.name} />;
+  if (user) return <AuthenticatedHome userName={user.name} userId={user.id} />;
 
   return (
     <div className="overflow-hidden">

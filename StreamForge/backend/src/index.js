@@ -7,6 +7,7 @@ const mongoose = require('mongoose');
 const path = require('path');
 
 const { setupSocket } = require('./socket');
+const { startScheduler } = require('./scheduler');
 
 const authRoutes = require('./routes/auth.routes');
 const commentRoutes = require('./routes/comment.routes');
@@ -62,6 +63,7 @@ mongoose
     console.log('MongoDB connected');
     const server = http.createServer(app);
     setupSocket(server);
+    startScheduler();
     server.listen(PORT, () => console.log(`StreamForge API running on http://localhost:${PORT}`));
   })
   .catch((err) => {
