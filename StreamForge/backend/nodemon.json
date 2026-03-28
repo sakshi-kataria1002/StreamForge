@@ -1,0 +1,5 @@
+{
+  "exec": "node --dns-result-order=ipv4first",
+  "watch": ["src"],
+  "ext": "js,json"
+}

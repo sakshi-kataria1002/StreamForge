@@ -1,12 +1,20 @@
 const express = require('express');
 const router = express.Router();
 const videoController = require('../controllers/video.controller');
-const { protect } = require('../middleware/auth.middleware');
+const { toggleSave, getSaveStatus } = require('../controllers/saved.controller');
+const { protect, optionalProtect } = require('../middleware/auth.middleware');
 
-// IMPORTANT: /upload-url must be defined before /:id routes to avoid param shadowing
-router.post('/upload-url', protect, videoController.getUploadUrl);
-router.post('/', protect, videoController.createVideo);
+// Public (with optional auth for like/save state)
 router.get('/', videoController.getVideos);
-router.get('/:id/status', protect, videoController.getVideoStatus);
+router.get('/:id', optionalProtect, videoController.getVideo);
+
+// Protected
+router.post('/', protect, videoController.uploadFields, videoController.uploadVideo);
+router.put('/:id', protect, videoController.updateVideo);
+router.delete('/:id', protect, videoController.deleteVideo);
+router.post('/:id/like', protect, videoController.likeVideo);
+router.post('/:id/dislike', protect, videoController.dislikeVideo);
+router.post('/:id/save', protect, toggleSave);
+router.get('/:id/save-status', protect, getSaveStatus);
 
 module.exports = router;
