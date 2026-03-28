@@ -3,12 +3,17 @@
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
 import { useSelector } from 'react-redux';
-import { useRouter } from 'next/navigation';
 import { getVideos, Video } from '../lib/api/video.api';
 import VideoCard from '../components/features/videos/VideoCard';
 
 interface RootState {
   auth: { user: { id: string; name: string } | null };
+}
+
+function formatViews(n: number) {
+  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
+  if (n >= 1_000) return `${(n / 1_000).toFixed(1)}K`;
+  return `${n}`;
 }
 
 function VideoSkeleton() {
@@ -34,29 +39,33 @@ function AuthenticatedHome({ userName }: { userName: string }) {
       .finally(() => setLoading(false));
   }, []);
 
+  const featured = videos[0] ?? null;
+  const rest = videos.slice(1);
+
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-slate-950">
 
-      {/* Top hero banner */}
-      <div className="relative bg-gray-100 dark:bg-slate-900 border-b border-gray-200 dark:border-slate-800 overflow-hidden">
-        <div className="absolute top-0 left-1/4 w-72 h-72 bg-indigo-600/15 rounded-full blur-3xl pointer-events-none" />
-        <div className="absolute bottom-0 right-1/4 w-64 h-64 bg-purple-600/10 rounded-full blur-3xl pointer-events-none" />
+      {/* Hero banner */}
+      <div className="relative bg-white dark:bg-slate-900 border-b border-gray-200 dark:border-slate-800 overflow-hidden">
+        <div className="absolute top-0 left-0 w-96 h-64 bg-indigo-500/10 dark:bg-indigo-600/15 rounded-full blur-3xl pointer-events-none -translate-x-1/3 -translate-y-1/3" />
+        <div className="absolute bottom-0 right-0 w-80 h-64 bg-purple-500/10 dark:bg-purple-600/10 rounded-full blur-3xl pointer-events-none translate-x-1/4 translate-y-1/4" />
         <div
-          className="absolute inset-0 opacity-[0.03] pointer-events-none"
-          style={{ backgroundImage: 'radial-gradient(circle, #a5b4fc 1px, transparent 1px)', backgroundSize: '28px 28px' }}
+          className="absolute inset-0 opacity-[0.025] dark:opacity-[0.03] pointer-events-none"
+          style={{ backgroundImage: 'radial-gradient(circle, #6366f1 1px, transparent 1px)', backgroundSize: '28px 28px' }}
         />
-        <div className="relative max-w-6xl mx-auto px-8 py-10 flex items-center justify-between">
+        <div className="relative max-w-6xl mx-auto px-6 sm:px-8 py-10 flex items-center justify-between gap-4">
           <div>
-            <p className="text-gray-500 dark:text-slate-400 text-sm mb-1">Good to see you back</p>
-            <h1 className="text-3xl font-bold text-gray-900 dark:text-white">
-              Hey, {userName.split(' ')[0]}{' '}
-              <span className="bg-gradient-to-r from-indigo-400 to-purple-400 bg-clip-text text-transparent">👋</span>
+            <h1 className="text-2xl sm:text-3xl font-bold text-gray-900 dark:text-white">
+              Welcome back,{' '}
+              <span className="bg-gradient-to-r from-indigo-500 to-purple-500 dark:from-indigo-400 dark:to-purple-400 bg-clip-text text-transparent">
+                {userName.split(' ')[0]}
+              </span>
             </h1>
-            <p className="text-gray-400 dark:text-slate-500 text-sm mt-2">Here's what's been uploaded recently</p>
+            <p className="text-gray-500 dark:text-slate-400 text-sm mt-1.5">Here's what's been uploaded recently</p>
           </div>
           <Link
             href="/upload"
-            className="hidden sm:flex items-center gap-2 px-5 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-semibold transition-all duration-200 shadow-lg shadow-indigo-600/20 active:scale-95"
+            className="hidden sm:flex items-center gap-2 px-5 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-semibold transition-all duration-200 shadow-lg shadow-indigo-600/20 hover:shadow-indigo-600/30 active:scale-95 shrink-0"
           >
             <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
@@ -66,46 +75,105 @@ function AuthenticatedHome({ userName }: { userName: string }) {
         </div>
       </div>
 
-      {/* Video section */}
-      <div className="max-w-6xl mx-auto px-8 py-8">
-
-        {/* Section label */}
-        <div className="flex items-center justify-between mb-6">
-          <div className="flex items-center gap-2.5">
-            <div className="w-1 h-5 bg-indigo-500 rounded-full" />
-            <h2 className="text-gray-900 dark:text-white font-semibold text-base">Recent Videos</h2>
-          </div>
-          <Link href="/feed" className="text-gray-400 dark:text-slate-500 hover:text-indigo-400 text-xs font-medium transition-colors">
-            View all →
-          </Link>
-        </div>
+      <div className="max-w-6xl mx-auto px-6 sm:px-8 py-8 space-y-10">
 
         {loading ? (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
-            {Array.from({ length: 6 }).map((_, i) => <VideoSkeleton key={i} />)}
-          </div>
+          <>
+            {/* Featured skeleton */}
+            <div className="w-full rounded-2xl aspect-[16/7] bg-gray-200 dark:bg-slate-800 animate-pulse" />
+            <div>
+              <div className="flex items-center gap-2.5 mb-6">
+                <div className="w-1 h-5 bg-gray-200 dark:bg-slate-700 rounded-full" />
+                <div className="h-4 w-32 bg-gray-200 dark:bg-slate-700 rounded animate-pulse" />
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
+                {Array.from({ length: 5 }).map((_, i) => <VideoSkeleton key={i} />)}
+              </div>
+            </div>
+          </>
         ) : videos.length === 0 ? (
-          <div className="text-center py-24 border border-gray-200 dark:border-slate-800 rounded-2xl bg-gray-100/50 dark:bg-slate-900/50">
-            <div className="w-16 h-16 rounded-2xl bg-white dark:bg-slate-800 flex items-center justify-center mx-auto mb-4">
-              <svg className="w-7 h-7 text-gray-400 dark:text-slate-600" fill="none" stroke="currentColor" strokeWidth={1.5} viewBox="0 0 24 24">
+          <div className="text-center py-24 border border-dashed border-gray-200 dark:border-slate-800 rounded-2xl bg-white dark:bg-slate-900/40">
+            <div className="w-14 h-14 rounded-2xl bg-gray-100 dark:bg-slate-800 flex items-center justify-center mx-auto mb-4">
+              <svg className="w-7 h-7 text-gray-400 dark:text-slate-500" fill="none" stroke="currentColor" strokeWidth={1.5} viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 10.5l4.72-4.72a.75.75 0 011.28.53v11.38a.75.75 0 01-1.28.53l-4.72-4.72M4.5 18.75h9a2.25 2.25 0 002.25-2.25v-9a2.25 2.25 0 00-2.25-2.25h-9A2.25 2.25 0 002.25 7.5v9a2.25 2.25 0 002.25 2.25z" />
               </svg>
             </div>
-            <p className="text-gray-700 dark:text-slate-300 font-semibold">No videos yet</p>
+            <p className="text-gray-800 dark:text-slate-200 font-semibold">No videos yet</p>
             <p className="text-sm text-gray-400 dark:text-slate-500 mt-1">Be the first to upload something!</p>
-            <Link
-              href="/upload"
-              className="inline-block mt-6 px-5 py-2.5 rounded-xl bg-indigo-600 text-white text-sm font-semibold hover:bg-indigo-500 transition-colors"
-            >
+            <Link href="/upload" className="inline-block mt-6 px-5 py-2.5 rounded-xl bg-indigo-600 text-white text-sm font-semibold hover:bg-indigo-500 transition-colors shadow-lg shadow-indigo-600/20">
               Upload a video
             </Link>
           </div>
         ) : (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
-            {videos.map((video) => (
-              <VideoCard key={video._id} video={video} />
-            ))}
-          </div>
+          <>
+            {/* ── Featured video ── */}
+            {featured && (
+              <div>
+                <div className="flex items-center gap-2.5 mb-4">
+                  <div className="w-1 h-5 bg-indigo-500 rounded-full" />
+                  <h2 className="text-gray-900 dark:text-white font-semibold text-base">Latest Upload</h2>
+                </div>
+                <Link href={`/videos/${featured._id}`} className="block group">
+                  <div className="relative w-full rounded-2xl overflow-hidden aspect-[16/7] bg-gray-900">
+                    {featured.thumbnailUrl ? (
+                      <img
+                        src={featured.thumbnailUrl}
+                        alt={featured.title}
+                        className="w-full h-full object-cover group-hover:scale-[1.02] transition-transform duration-500"
+                      />
+                    ) : (
+                      <div className="w-full h-full bg-gradient-to-br from-indigo-900 via-slate-900 to-purple-900 flex items-center justify-center">
+                        <svg className="w-16 h-16 text-white/20" fill="currentColor" viewBox="0 0 24 24">
+                          <path d="M8 5v14l11-7z" />
+                        </svg>
+                      </div>
+                    )}
+                    {/* Gradient overlay */}
+                    <div className="absolute inset-0 bg-gradient-to-t from-black/75 via-black/20 to-transparent" />
+                    {/* Play badge */}
+                    <div className="absolute top-4 left-4 flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-black/50 backdrop-blur-sm border border-white/10 text-white text-xs font-medium">
+                      <span className="w-1.5 h-1.5 rounded-full bg-indigo-400 animate-pulse" />
+                      Latest
+                    </div>
+                    {/* Play button on hover */}
+                    <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity duration-200">
+                      <div className="w-16 h-16 rounded-full bg-white/20 backdrop-blur-sm border border-white/30 flex items-center justify-center">
+                        <svg className="w-7 h-7 text-white ml-1" fill="currentColor" viewBox="0 0 24 24">
+                          <path d="M8 5v14l11-7z" />
+                        </svg>
+                      </div>
+                    </div>
+                    {/* Info overlay */}
+                    <div className="absolute bottom-0 left-0 right-0 p-6">
+                      <p className="text-indigo-300 text-xs font-medium mb-1.5">{featured.owner?.name ?? 'Unknown creator'}</p>
+                      <h3 className="text-xl sm:text-2xl font-bold text-white leading-tight line-clamp-2">{featured.title}</h3>
+                      <p className="text-gray-400 text-sm mt-2">{formatViews(featured.views)} views</p>
+                    </div>
+                  </div>
+                </Link>
+              </div>
+            )}
+
+            {/* ── More Videos ── */}
+            {rest.length > 0 && (
+              <div>
+                <div className="flex items-center justify-between mb-6">
+                  <div className="flex items-center gap-2.5">
+                    <div className="w-1 h-5 bg-purple-500 rounded-full" />
+                    <h2 className="text-gray-900 dark:text-white font-semibold text-base">More Videos</h2>
+                  </div>
+                  <Link href="/feed" className="text-xs font-medium text-gray-400 dark:text-slate-500 hover:text-indigo-500 dark:hover:text-indigo-400 transition-colors">
+                    Browse all →
+                  </Link>
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
+                  {rest.map((video) => (
+                    <VideoCard key={video._id} video={video} />
+                  ))}
+                </div>
+              </div>
+            )}
+          </>
         )}
       </div>
     </div>
@@ -121,54 +189,56 @@ export default function HomePage() {
     <div className="overflow-hidden">
 
       {/* ── Hero ── */}
-      <section className="relative bg-gray-100 dark:bg-slate-900 overflow-hidden min-h-[calc(100vh-4rem)] flex items-center">
-        {/* Orbs */}
-        <div className="absolute top-0 left-1/4 w-96 h-96 bg-indigo-600/20 rounded-full blur-3xl pointer-events-none" />
-        <div className="absolute bottom-0 right-1/4 w-80 h-80 bg-purple-600/20 rounded-full blur-3xl pointer-events-none" />
-        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[200px] bg-indigo-500/10 rounded-full blur-3xl pointer-events-none" />
+      <section className="relative bg-gray-50 dark:bg-slate-950 overflow-hidden min-h-[calc(100vh-4rem)] flex items-center">
 
-        {/* Dot grid */}
+        <div className="absolute top-0 right-0 w-[600px] h-[600px] bg-indigo-400/10 dark:bg-indigo-600/15 rounded-full blur-3xl pointer-events-none translate-x-1/3 -translate-y-1/3" />
+        <div className="absolute bottom-0 left-0 w-[500px] h-[500px] bg-purple-400/10 dark:bg-purple-600/15 rounded-full blur-3xl pointer-events-none -translate-x-1/3 translate-y-1/3" />
         <div
           className="absolute inset-0 opacity-[0.04] pointer-events-none"
-          style={{
-            backgroundImage: 'radial-gradient(circle, #a5b4fc 1px, transparent 1px)',
-            backgroundSize: '28px 28px',
-          }}
+          style={{ backgroundImage: 'radial-gradient(circle, #6366f1 1px, transparent 1px)', backgroundSize: '32px 32px' }}
         />
 
-        <div className="relative w-full max-w-6xl mx-auto px-6 py-24 text-center">
-          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-indigo-500/10 border border-indigo-500/20 text-indigo-300 text-xs font-medium mb-6">
-            <span className="w-1.5 h-1.5 rounded-full bg-indigo-400 animate-pulse" />
-            Upload, watch &amp; connect
+        <div className="relative w-full max-w-5xl mx-auto px-6 py-24 text-center">
+
+          <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-indigo-50 dark:bg-indigo-500/10 border border-indigo-200 dark:border-indigo-500/20 text-indigo-600 dark:text-indigo-400 text-xs font-medium mb-8">
+            <span className="w-1.5 h-1.5 rounded-full bg-indigo-500 dark:bg-indigo-400 animate-pulse" />
+            Free for creators
           </div>
 
-          <h1 className="text-5xl sm:text-6xl font-bold text-gray-900 dark:text-white leading-tight tracking-tight">
-            The platform for{' '}
-            <span className="bg-gradient-to-r from-indigo-400 via-purple-400 to-pink-400 bg-clip-text text-transparent">
-              creators
+          <h1 className="text-5xl sm:text-6xl lg:text-7xl font-bold text-gray-900 dark:text-white leading-[1.1] tracking-tight">
+            Your stage.{' '}
+            <br className="hidden sm:block" />
+            <span className="bg-gradient-to-r from-indigo-500 via-purple-500 to-pink-500 dark:from-indigo-400 dark:via-purple-400 dark:to-pink-400 bg-clip-text text-transparent">
+              Your audience.
             </span>
           </h1>
-          <p className="mt-5 text-lg text-gray-500 dark:text-slate-400 max-w-lg mx-auto leading-relaxed">
+
+          <p className="mt-6 text-lg text-gray-500 dark:text-slate-400 max-w-xl mx-auto leading-relaxed">
             Upload your videos, grow your audience, and discover content from creators you love — all in one place.
           </p>
 
-          <div className="mt-8 flex justify-center gap-3 flex-wrap">
+          <div className="mt-10 flex justify-center gap-3 flex-wrap">
             <Link
               href="/signup"
-              className="px-6 py-3 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-semibold text-sm transition-all duration-200 shadow-lg shadow-indigo-600/30 hover:scale-105 active:scale-95"
+              className="px-7 py-3 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-semibold text-sm transition-all duration-200 shadow-lg shadow-indigo-600/25 hover:shadow-indigo-600/40 hover:scale-[1.02] active:scale-95"
             >
-              Get started free
+              Get started — it's free
             </Link>
             <Link
               href="/login"
-              className="px-6 py-3 rounded-xl bg-white/5 hover:bg-white/10 text-gray-700 dark:text-slate-300 hover:text-gray-900 dark:hover:text-white font-semibold text-sm border border-white/10 hover:border-white/20 transition-all duration-200"
+              className="px-7 py-3 rounded-xl bg-white dark:bg-slate-800 hover:bg-gray-100 dark:hover:bg-slate-700 text-gray-700 dark:text-slate-300 font-semibold text-sm border border-gray-200 dark:border-slate-700 transition-all duration-200 hover:scale-[1.02] active:scale-95"
             >
-              Sign in →
+              Sign in
             </Link>
           </div>
 
-          {/* Simple feature cards */}
-          <div className="mt-20 grid grid-cols-1 sm:grid-cols-3 gap-4 max-w-3xl mx-auto">
+          <div className="mt-20 mb-10 flex items-center gap-4 max-w-xs mx-auto">
+            <div className="flex-1 h-px bg-gray-200 dark:bg-slate-800" />
+            <span className="text-xs text-gray-400 dark:text-slate-600 font-medium">everything you need</span>
+            <div className="flex-1 h-px bg-gray-200 dark:bg-slate-800" />
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 max-w-3xl mx-auto">
             {[
               {
                 icon: (
@@ -199,8 +269,11 @@ export default function HomePage() {
                 desc: 'Subscribe to creators and grow your own community.',
               },
             ].map(({ icon, title, desc }) => (
-              <div key={title} className="bg-white/5 border border-white/10 rounded-2xl p-5 text-left hover:bg-white/8 transition-colors duration-200">
-                <div className="w-9 h-9 rounded-lg bg-indigo-500/15 border border-indigo-500/20 text-indigo-400 flex items-center justify-center mb-3">
+              <div
+                key={title}
+                className="bg-white dark:bg-slate-900 border border-gray-200 dark:border-slate-800 rounded-2xl p-5 text-left hover:border-indigo-200 dark:hover:border-indigo-500/30 hover:shadow-md hover:shadow-indigo-500/5 transition-all duration-200"
+              >
+                <div className="w-9 h-9 rounded-lg bg-indigo-50 dark:bg-indigo-500/15 border border-indigo-200 dark:border-indigo-500/20 text-indigo-600 dark:text-indigo-400 flex items-center justify-center mb-3">
                   {icon}
                 </div>
                 <h3 className="text-sm font-semibold text-gray-900 dark:text-white">{title}</h3>
@@ -208,6 +281,7 @@ export default function HomePage() {
               </div>
             ))}
           </div>
+
         </div>
       </section>
 

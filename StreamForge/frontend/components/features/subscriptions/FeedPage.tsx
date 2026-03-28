@@ -6,12 +6,12 @@ import VideoCard from '../videos/VideoCard';
 
 function SkeletonGrid() {
   return (
-    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+    <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
       {Array.from({ length: 6 }).map((_, i) => (
         <div key={i} className="rounded-xl overflow-hidden bg-white dark:bg-slate-800 border border-gray-100 dark:border-slate-700/50 animate-pulse">
           <div className="w-full aspect-video bg-gray-200 dark:bg-slate-700" />
-          <div className="p-3 space-y-2">
-            <div className="h-3 bg-gray-200 dark:bg-slate-700 rounded w-3/4" />
+          <div className="p-4 space-y-2">
+            <div className="h-3.5 bg-gray-200 dark:bg-slate-700 rounded w-4/5" />
             <div className="h-3 bg-gray-200 dark:bg-slate-700 rounded w-1/2" />
           </div>
         </div>
@@ -118,7 +118,7 @@ export default function FeedPage() {
           {!query && <p className="text-xs mt-1">Be the first to upload a video!</p>}
         </div>
       ) : (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
           {filtered.map((video) => (
             <VideoCard key={video._id} video={video} />
           ))}
