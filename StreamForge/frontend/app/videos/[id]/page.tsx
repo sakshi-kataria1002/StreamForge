@@ -12,6 +12,7 @@ import Link from 'next/link';
 import VideoSummary from '../../../components/features/videos/VideoSummary';
 import CaptionToggle from '../../../components/features/videos/CaptionToggle';
 import ReportButton from '../../../components/features/moderation/ReportButton';
+import AddToPlaylistModal from '../../../components/features/playlists/AddToPlaylistModal';
 
 interface RootState {
   auth: { user: { id: string; name: string } | null; accessToken: string | null };
@@ -54,6 +55,7 @@ export default function WatchPage() {
   const [liked, setLiked] = useState(false);
   const [disliked, setDisliked] = useState(false);
   const [saved, setSaved] = useState(false);
+  const [showPlaylistModal, setShowPlaylistModal] = useState(false);
   const [actionError, setActionError] = useState('');
   const [related, setRelated] = useState<Video[]>([]);
   const [chapters, setChapters] = useState<{ time: number; label: string }[]>([]);
@@ -353,6 +355,18 @@ export default function WatchPage() {
                   </svg>
                   {saved ? 'Saved' : 'Save'}
                 </button>
+                {currentUser && (
+                  <button
+                    type="button"
+                    onClick={() => setShowPlaylistModal(true)}
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-medium transition-colors bg-gray-100 dark:bg-slate-800 text-gray-600 dark:text-slate-300 hover:bg-gray-200 dark:hover:bg-slate-700"
+                  >
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={1.5} viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 12h16.5m-16.5 3.75h16.5M3.75 19.5h16.5M5.625 4.5h12.75a1.875 1.875 0 010 3.75H5.625a1.875 1.875 0 010-3.75z" />
+                    </svg>
+                    Save to playlist
+                  </button>
+                )}
                 <span className="text-xs text-gray-400 dark:text-slate-500 ml-1">{formatViews(video.views)} views · {timeAgo(video.createdAt)}</span>
                 {currentUser && !isOwner && (
                   <ReportButton targetId={video._id} targetType="video" />
@@ -441,6 +455,10 @@ export default function WatchPage() {
             </div>
           </div>
         </div>
+
+      {showPlaylistModal && video && (
+        <AddToPlaylistModal videoId={video._id} onClose={() => setShowPlaylistModal(false)} />
+      )}
 
         {/* Sidebar */}
         <div className="lg:col-span-1 space-y-5">
