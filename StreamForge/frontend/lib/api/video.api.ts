@@ -90,3 +90,14 @@ export const getUserVideos = async (userId: string): Promise<Video[]> => {
   const { data } = await api.get(`/users/${userId}/videos`);
   return data.data;
 };
+
+export const getLikedVideos = async (
+  token: string,
+  page = 1
+): Promise<{ videos: Video[]; total: number; page: number; totalPages: number }> => {
+  const { data } = await api.get('/videos/liked', {
+    headers: { Authorization: `Bearer ${token}` },
+    params: { page },
+  });
+  return data.data;
+};

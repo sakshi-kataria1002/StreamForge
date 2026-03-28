@@ -44,11 +44,15 @@ const authSlice = createSlice({
       state.accessToken = action.payload.accessToken;
       state.isAuthenticated = true;
       state.error = null;
+      try {
+        localStorage.setItem('sf_auth', JSON.stringify({ user: action.payload.user, accessToken: action.payload.accessToken }));
+      } catch {}
     },
     logout(state) {
       state.user = null;
       state.accessToken = null;
       state.isAuthenticated = false;
+      try { localStorage.removeItem('sf_auth'); } catch {}
     },
   },
   extraReducers: (builder) => {
@@ -62,6 +66,9 @@ const authSlice = createSlice({
         state.user = action.payload.user;
         state.accessToken = action.payload.accessToken;
         state.isAuthenticated = true;
+        try {
+          localStorage.setItem('sf_auth', JSON.stringify({ user: action.payload.user, accessToken: action.payload.accessToken }));
+        } catch {}
       })
       .addCase(loginThunk.rejected, (state, action) => {
         state.loading = false;
