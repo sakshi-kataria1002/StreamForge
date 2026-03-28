@@ -15,7 +15,8 @@ export interface Video {
   filePath: string;
   fileUrl: string;
   thumbnailUrl?: string;
-  status: 'ready';
+  status: 'ready' | 'scheduled';
+  scheduledAt?: string;
   duration: number;
   views: number;
   likesCount?: number;
@@ -97,6 +98,7 @@ export interface AnalyticsData {
   viewsByDay: { _id: string; views: number }[];
   topVideos: { _id: string; title: string; views: number; likes: string[]; thumbnailUrl?: string; createdAt: string }[];
   subscriberCount: number;
+  subscriberGrowth: { _id: string; subs: number }[];
 }
 
 export const getAnalytics = async (token: string): Promise<AnalyticsData> => {
@@ -146,6 +148,15 @@ export const dislikeVideo = async (id: string, token: string) => {
 
 export const getUserVideos = async (userId: string): Promise<Video[]> => {
   const { data } = await api.get(`/users/${userId}/videos`);
+  return data.data;
+};
+
+export const uploadThumbnail = async (videoId: string, file: File, token: string): Promise<{ thumbnailUrl: string }> => {
+  const formData = new FormData();
+  formData.append('thumbnail', file);
+  const { data } = await api.post(`/videos/${videoId}/thumbnail`, formData, {
+    headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'multipart/form-data' },
+  });
   return data.data;
 };
 

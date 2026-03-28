@@ -6,7 +6,7 @@ const WatchHistory = require('../models/WatchHistory.model');
 exports.getDashboard = async (req, res) => {
   try {
     const [videos, subscriberCount] = await Promise.all([
-      Video.find({ owner: req.user.id, status: 'ready' }).sort({ createdAt: -1 }),
+      Video.find({ owner: req.user.id, status: { $in: ['ready', 'scheduled'] } }).sort({ createdAt: -1 }),
       Subscription.countDocuments({ creator: req.user.id }),
     ]);
 
@@ -38,7 +38,7 @@ exports.getAnalytics = async (req, res) => {
 
     const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
 
-    const [viewsByDay, topVideos, subscriberCount] = await Promise.all([
+    const [viewsByDay, topVideos, subscriberCount, subscriberGrowth] = await Promise.all([
       WatchHistory.aggregate([
         { $match: { video: { $in: ids }, watchedAt: { $gte: thirtyDaysAgo } } },
         { $group: { _id: { $dateToString: { format: '%Y-%m-%d', date: '$watchedAt' } }, views: { $sum: 1 } } },
@@ -49,9 +49,14 @@ exports.getAnalytics = async (req, res) => {
         .limit(5)
         .select('title views likes thumbnailUrl createdAt'),
       Subscription.countDocuments({ creator: req.user.id }),
+      Subscription.aggregate([
+        { $match: { creator: req.user._id ?? req.user.id, createdAt: { $gte: thirtyDaysAgo } } },
+        { $group: { _id: { $dateToString: { format: '%Y-%m-%d', date: '$createdAt' } }, subs: { $sum: 1 } } },
+        { $sort: { _id: 1 } },
+      ]),
     ]);
 
-    res.json({ success: true, data: { viewsByDay, topVideos, subscriberCount } });
+    res.json({ success: true, data: { viewsByDay, topVideos, subscriberCount, subscriberGrowth } });
   } catch (err) {
     res.status(500).json({ success: false, error: { message: err.message } });
   }
