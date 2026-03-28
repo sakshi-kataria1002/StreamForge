@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import { useSelector, useDispatch } from 'react-redux';
 import { useState, useEffect, useRef } from 'react';
+import { useRouter } from 'next/navigation';
 import { logout } from '../lib/store/authSlice';
 import { getNotifications, markAllRead, Notification } from '../lib/api/notification.api';
 import { useTheme } from '../lib/context/theme';
@@ -24,6 +25,7 @@ export default function Navbar() {
   const user = useSelector((state: RootState) => state.auth.user);
   const accessToken = useSelector((state: RootState) => state.auth.accessToken);
   const dispatch = useDispatch();
+  const router = useRouter();
   const { theme, toggleTheme } = useTheme();
   const { toggle: toggleSidebar } = useSidebar();
 
@@ -309,7 +311,7 @@ export default function Navbar() {
                     <div className="border-t border-gray-100 dark:border-slate-800 p-2">
                       <button
                         type="button"
-                        onClick={() => { dispatch(logout()); setUserMenuOpen(false); }}
+                        onClick={() => { dispatch(logout()); setUserMenuOpen(false); router.push('/'); }}
                         className="flex items-center gap-3.5 w-full px-4 py-2.5 rounded-xl text-sm text-red-500 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-500/10 transition-colors group/signout"
                       >
                         <div className="w-8 h-8 rounded-lg bg-red-50 dark:bg-red-500/10 flex items-center justify-center text-red-400 group-hover/signout:bg-red-100 dark:group-hover/signout:bg-red-500/20 transition-colors shrink-0">

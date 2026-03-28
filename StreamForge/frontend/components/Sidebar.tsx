@@ -1,5 +1,6 @@
 'use client';
 
+import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useSelector } from 'react-redux';
@@ -150,8 +151,10 @@ function SidebarContent({ onNavigate }: { onNavigate: () => void }) {
 export default function Sidebar() {
   const user = useSelector((state: RootState) => state.auth.user);
   const { isOpen, close } = useSidebar();
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => setMounted(true), []);
 
-  if (!user) return null;
+  if (!mounted || !user) return null;
 
   return (
     <>
