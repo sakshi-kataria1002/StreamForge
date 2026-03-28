@@ -5,7 +5,7 @@ import { useSelector } from 'react-redux';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { getDashboard, DashboardData } from '../../lib/api/dashboard.api';
-import { deleteVideo } from '../../lib/api/video.api';
+import { deleteVideo, getAnalytics, AnalyticsData } from '../../lib/api/video.api';
 
 interface RootState {
   auth: { user: { id: string; name: string } | null; accessToken: string | null };
@@ -42,14 +42,18 @@ export default function DashboardPage() {
   const user = useSelector((state: RootState) => state.auth.user);
   const accessToken = useSelector((state: RootState) => state.auth.accessToken);
   const [data, setData] = useState<DashboardData | null>(null);
+  const [analytics, setAnalytics] = useState<AnalyticsData | null>(null);
   const [loading, setLoading] = useState(true);
   const [deletingId, setDeletingId] = useState<string | null>(null);
 
   useEffect(() => {
     if (!user) { router.replace('/login'); return; }
     if (!accessToken) return;
-    getDashboard(accessToken)
-      .then(setData)
+    Promise.all([
+      getDashboard(accessToken),
+      getAnalytics(accessToken).catch(() => null),
+    ])
+      .then(([d, a]) => { setData(d); setAnalytics(a); })
       .catch(() => {})
       .finally(() => setLoading(false));
   }, [user, accessToken, router]);
@@ -128,6 +132,63 @@ export default function DashboardPage() {
                 <path strokeLinecap="round" strokeLinejoin="round" d="M15 19.128a9.38 9.38 0 002.625.372 9.337 9.337 0 004.121-.952 4.125 4.125 0 00-7.533-2.493M15 19.128v-.003c0-1.113-.285-2.16-.786-3.07M15 19.128v.106A12.318 12.318 0 018.624 21c-2.331 0-4.512-.645-6.374-1.766l-.001-.109a6.375 6.375 0 0111.964-3.07M12 6.375a3.375 3.375 0 11-6.75 0 3.375 3.375 0 016.75 0zm8.25 2.25a2.625 2.625 0 11-5.25 0 2.625 2.625 0 015.25 0z" />
               </svg>
             } />
+          </div>
+        )}
+
+        {/* Analytics: views over time */}
+        {!loading && analytics && analytics.viewsByDay.length > 0 && (() => {
+          const maxViews = Math.max(...analytics.viewsByDay.map((d) => d.views), 1);
+          return (
+            <div className="bg-white dark:bg-slate-900 border border-gray-200 dark:border-slate-800 rounded-2xl p-6">
+              <div className="flex items-center gap-2.5 mb-5">
+                <div className="w-1 h-5 bg-indigo-500 rounded-full" />
+                <h2 className="text-gray-900 dark:text-white font-semibold">Views — last 30 days</h2>
+              </div>
+              <div className="flex items-end gap-1 h-32">
+                {analytics.viewsByDay.map((d) => (
+                  <div key={d._id} className="flex-1 flex flex-col items-center gap-1 group" title={`${d._id}: ${d.views} views`}>
+                    <div
+                      className="w-full bg-indigo-500/80 dark:bg-indigo-400/70 rounded-sm hover:bg-indigo-600 dark:hover:bg-indigo-300 transition-colors"
+                      style={{ height: `${Math.round((d.views / maxViews) * 100)}%`, minHeight: d.views > 0 ? '4px' : '0' }}
+                    />
+                  </div>
+                ))}
+              </div>
+              <div className="flex justify-between mt-2 text-xs text-gray-400 dark:text-slate-500">
+                <span>{analytics.viewsByDay[0]?._id?.slice(5)}</span>
+                <span>{analytics.viewsByDay[analytics.viewsByDay.length - 1]?._id?.slice(5)}</span>
+              </div>
+            </div>
+          );
+        })()}
+
+        {/* Top videos */}
+        {!loading && analytics && analytics.topVideos.length > 0 && (
+          <div className="bg-white dark:bg-slate-900 border border-gray-200 dark:border-slate-800 rounded-2xl p-6">
+            <div className="flex items-center gap-2.5 mb-4">
+              <div className="w-1 h-5 bg-amber-500 rounded-full" />
+              <h2 className="text-gray-900 dark:text-white font-semibold">Top Videos</h2>
+            </div>
+            <div className="space-y-3">
+              {analytics.topVideos.map((v, i) => {
+                const maxV = Math.max(...analytics.topVideos.map((x) => x.views), 1);
+                return (
+                  <div key={v._id} className="flex items-center gap-3">
+                    <span className="text-xs font-bold text-gray-400 dark:text-slate-500 w-5 shrink-0">#{i + 1}</span>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium text-gray-800 dark:text-slate-200 truncate">{v.title}</p>
+                      <div className="mt-1 h-1.5 rounded-full bg-gray-100 dark:bg-slate-800 overflow-hidden">
+                        <div
+                          className="h-full bg-amber-400 dark:bg-amber-500 rounded-full"
+                          style={{ width: `${Math.round((v.views / maxV) * 100)}%` }}
+                        />
+                      </div>
+                    </div>
+                    <span className="text-xs text-gray-500 dark:text-slate-400 shrink-0">{formatNumber(v.views)} views</span>
+                  </div>
+                );
+              })}
+            </div>
           </div>
         )}
 

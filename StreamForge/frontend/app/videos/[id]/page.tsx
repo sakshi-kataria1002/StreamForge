@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { useSelector } from 'react-redux';
-import { getVideo, likeVideo, dislikeVideo, Video } from '../../../lib/api/video.api';
+import { getVideo, likeVideo, dislikeVideo, getRelatedVideos, Video } from '../../../lib/api/video.api';
 import { useToast } from '../../../lib/context/toast';
 import { toggleSave, getSaveStatus } from '../../../lib/api/saved.api';
 import { getComments, addComment, deleteComment, Comment } from '../../../lib/api/comment.api';
@@ -52,6 +52,8 @@ export default function WatchPage() {
   const [disliked, setDisliked] = useState(false);
   const [saved, setSaved] = useState(false);
   const [actionError, setActionError] = useState('');
+  const [related, setRelated] = useState<Video[]>([]);
+  const [chapters, setChapters] = useState<{ time: number; label: string }[]>([]);
   const [loading, setLoading] = useState(true);
   const [notFound, setNotFound] = useState(false);
   const [resumeTime, setResumeTime] = useState<number | null>(null);
@@ -66,14 +68,28 @@ export default function WatchPage() {
     Promise.all([
       getVideo(id, accessToken ?? undefined),
       getComments(id),
+      getRelatedVideos(id).catch(() => []),
     ])
-      .then(([v, c]) => {
+      .then(([v, c, rel]) => {
         setVideo(v);
         setComments(c.comments);
         setLikes(v.likesCount ?? 0);
         setDislikes(v.dislikesCount ?? 0);
         setLiked(v.liked ?? false);
         setDisliked(v.disliked ?? false);
+        setRelated(rel);
+        // Parse chapters from description: lines like "0:00 Intro" or "1:23:45 Section"
+        const parsed: { time: number; label: string }[] = [];
+        const regex = /(?:^|\n)(\d+:\d{2}(?::\d{2})?)\s+(.+)/g;
+        let m;
+        while ((m = regex.exec(v.description ?? '')) !== null) {
+          const parts = m[1].split(':').map(Number);
+          const secs = parts.length === 3
+            ? parts[0] * 3600 + parts[1] * 60 + parts[2]
+            : parts[0] * 60 + parts[1];
+          parsed.push({ time: secs, label: m[2].trim() });
+        }
+        setChapters(parsed);
       })
       .catch(() => setNotFound(true))
       .finally(() => setLoading(false));
@@ -416,35 +432,80 @@ export default function WatchPage() {
         </div>
 
         {/* Sidebar */}
-        <div className="lg:col-span-1">
-          <div className="bg-gray-100 dark:bg-slate-800 rounded-2xl p-4 space-y-2">
-            <p className="text-xs font-semibold text-gray-500 dark:text-slate-400 uppercase tracking-wide mb-3">Video info</p>
-            <div className="text-sm text-gray-700 dark:text-slate-300 space-y-2">
-              <div className="flex justify-between">
-                <span className="text-gray-400 dark:text-slate-500">Uploaded by</span>
-                <span className="font-medium">{video.owner?.name ?? 'Unknown'}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-gray-400 dark:text-slate-500">Views</span>
-                <span className="font-medium">{formatViews(video.views)}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-gray-400 dark:text-slate-500">Uploaded</span>
-                <span className="font-medium">{timeAgo(video.createdAt)}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-gray-400 dark:text-slate-500">Status</span>
-                <span className="font-medium text-green-600 capitalize">{video.status}</span>
+        <div className="lg:col-span-1 space-y-5">
+
+          {/* Chapters */}
+          {chapters.length > 0 && (
+            <div className="bg-white dark:bg-slate-900 border border-gray-200 dark:border-slate-800 rounded-2xl p-4">
+              <p className="text-xs font-semibold text-gray-500 dark:text-slate-400 uppercase tracking-wide mb-3">Chapters</p>
+              <div className="space-y-1">
+                {chapters.map((ch, i) => (
+                  <button
+                    key={i}
+                    type="button"
+                    onClick={() => {
+                      if (videoRef.current) {
+                        videoRef.current.currentTime = ch.time;
+                        videoRef.current.play();
+                      }
+                    }}
+                    className="w-full flex items-center gap-3 px-2 py-1.5 rounded-lg hover:bg-gray-50 dark:hover:bg-slate-800 transition-colors text-left group"
+                  >
+                    <span className="text-xs font-mono font-semibold text-indigo-500 shrink-0 w-12">
+                      {ch.time >= 3600
+                        ? `${Math.floor(ch.time / 3600)}:${String(Math.floor((ch.time % 3600) / 60)).padStart(2, '0')}:${String(ch.time % 60).padStart(2, '0')}`
+                        : `${Math.floor(ch.time / 60)}:${String(ch.time % 60).padStart(2, '0')}`}
+                    </span>
+                    <span className="text-sm text-gray-700 dark:text-slate-300 group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition-colors truncate">
+                      {ch.label}
+                    </span>
+                  </button>
+                ))}
               </div>
             </div>
-            <div className="pt-3 border-t border-gray-200 dark:border-slate-700">
-              <Link
-                href="/feed"
-                className="text-xs text-indigo-600 hover:underline font-medium"
-              >
-                ← Browse all videos
-              </Link>
-            </div>
+          )}
+
+          {/* Related videos */}
+          <div>
+            <p className="text-xs font-semibold text-gray-500 dark:text-slate-400 uppercase tracking-wide mb-3">Up Next</p>
+            {related.length === 0 ? (
+              <div className="text-center py-8 text-gray-400 dark:text-slate-500 text-sm">
+                No related videos found
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {related.map((rv) => (
+                  <Link
+                    key={rv._id}
+                    href={`/videos/${rv._id}`}
+                    className="flex gap-3 group"
+                  >
+                    {/* Thumbnail */}
+                    <div className="relative w-36 h-20 rounded-xl overflow-hidden bg-gray-100 dark:bg-slate-800 shrink-0">
+                      {rv.thumbnailUrl ? (
+                        <img
+                          src={rv.thumbnailUrl}
+                          alt={rv.title}
+                          className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-200"
+                        />
+                      ) : (
+                        <div className="w-full h-full flex items-center justify-center text-gray-300 dark:text-slate-600">
+                          <svg className="w-6 h-6" fill="currentColor" viewBox="0 0 24 24"><path d="M8 5v14l11-7z" /></svg>
+                        </div>
+                      )}
+                    </div>
+                    {/* Info */}
+                    <div className="flex-1 min-w-0 py-0.5">
+                      <p className="text-xs font-semibold text-gray-900 dark:text-white line-clamp-2 leading-snug group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition-colors">
+                        {rv.title}
+                      </p>
+                      <p className="text-xs text-gray-500 dark:text-slate-400 mt-1">{rv.owner?.name ?? 'Unknown'}</p>
+                      <p className="text-xs text-gray-400 dark:text-slate-500">{formatViews(rv.views)} views</p>
+                    </div>
+                  </Link>
+                ))}
+              </div>
+            )}
           </div>
         </div>
       </div>

@@ -4,6 +4,9 @@ const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api/v1
 
 const api = axios.create({ baseURL: API_URL });
 
+export const CATEGORIES = ['Education', 'Entertainment', 'Gaming', 'Music', 'News', 'Sports', 'Technology', 'Travel', 'Other'] as const;
+export type Category = typeof CATEGORIES[number];
+
 export interface Video {
   _id: string;
   title: string;
@@ -19,7 +22,19 @@ export interface Video {
   dislikesCount?: number;
   liked?: boolean;
   disliked?: boolean;
+  category?: Category;
+  tags?: string[];
   createdAt: string;
+}
+
+export interface VideoFilters {
+  q?: string;
+  category?: string;
+  tag?: string;
+  duration?: 'short' | 'medium' | 'long';
+  dateFrom?: 'today' | 'week' | 'month';
+  sortBy?: 'newest' | 'oldest' | 'views';
+  page?: number;
 }
 
 export const uploadVideo = async (
@@ -42,9 +57,52 @@ export const uploadVideo = async (
 };
 
 export const getVideos = async (
-  page = 1
+  filters: VideoFilters = {}
 ): Promise<{ videos: Video[]; total: number; page: number; totalPages: number }> => {
-  const { data } = await api.get('/videos', { params: { page } });
+  const { data } = await api.get('/videos', { params: { page: 1, ...filters } });
+  return data.data;
+};
+
+export const getTrendingVideos = async (): Promise<Video[]> => {
+  const { data } = await api.get('/videos/trending');
+  return data.data;
+};
+
+export const getRelatedVideos = async (id: string): Promise<Video[]> => {
+  const { data } = await api.get(`/videos/${id}/related`);
+  return data.data;
+};
+
+export interface ChannelData {
+  channel: {
+    _id: string;
+    name: string;
+    createdAt: string;
+    subscriberCount: number;
+    totalViews: number;
+    videoCount: number;
+    isSubscribed: boolean;
+  };
+  videos: Video[];
+}
+
+export const getChannel = async (userId: string, token?: string): Promise<ChannelData> => {
+  const { data } = await api.get(`/users/${userId}/channel`, {
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
+  });
+  return data.data;
+};
+
+export interface AnalyticsData {
+  viewsByDay: { _id: string; views: number }[];
+  topVideos: { _id: string; title: string; views: number; likes: string[]; thumbnailUrl?: string; createdAt: string }[];
+  subscriberCount: number;
+}
+
+export const getAnalytics = async (token: string): Promise<AnalyticsData> => {
+  const { data } = await api.get('/dashboard/analytics', {
+    headers: { Authorization: `Bearer ${token}` },
+  });
   return data.data;
 };
 
