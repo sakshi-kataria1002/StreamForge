@@ -33,8 +33,12 @@ const videoSchema = new mongoose.Schema(
     },
     status: {
       type: String,
-      enum: ['ready'],
+      enum: ['ready', 'scheduled'],
       default: 'ready',
+    },
+    scheduledAt: {
+      type: Date,
+      default: null,
     },
     duration: {
       type: Number,

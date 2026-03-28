@@ -5,6 +5,13 @@ import { useSelector } from 'react-redux';
 import Link from 'next/link';
 import { uploadVideo, CATEGORIES } from '../../../lib/api/video.api';
 
+// Minimum schedule time: 10 minutes from now
+function minScheduleTime() {
+  const d = new Date(Date.now() + 10 * 60 * 1000);
+  // Format for datetime-local input: "YYYY-MM-DDTHH:MM"
+  return d.toISOString().slice(0, 16);
+}
+
 interface RootState {
   auth: { user: { id: string; name: string } | null; accessToken: string | null };
 }
@@ -66,9 +73,19 @@ export default function VideoUpload() {
   const [uploading, setUploading] = useState(false);
   const [done, setDone] = useState(false);
   const [doneTitle, setDoneTitle] = useState('');
+  const [doneScheduled, setDoneScheduled] = useState(false);
   const [error, setError] = useState('');
   const [dragging, setDragging] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
+
+  // Custom thumbnail
+  const [customThumbnail, setCustomThumbnail] = useState<File | null>(null);
+  const [customThumbnailPreview, setCustomThumbnailPreview] = useState<string | null>(null);
+  const thumbInputRef = useRef<HTMLInputElement>(null);
+
+  // Scheduled publishing
+  const [scheduleMode, setScheduleMode] = useState(false);
+  const [scheduledAt, setScheduledAt] = useState('');
 
   if (!currentUser || !accessToken) {
     return (
@@ -105,8 +122,22 @@ export default function VideoUpload() {
     setProgress(0);
     setUploading(false);
     setDone(false);
+    setDoneScheduled(false);
     setError('');
+    setCustomThumbnail(null);
+    if (customThumbnailPreview) URL.revokeObjectURL(customThumbnailPreview);
+    setCustomThumbnailPreview(null);
+    setScheduleMode(false);
+    setScheduledAt('');
     if (inputRef.current) inputRef.current.value = '';
+    if (thumbInputRef.current) thumbInputRef.current.value = '';
+  };
+
+  const handleThumbFile = (f: File) => {
+    if (!f.type.startsWith('image/')) return;
+    if (customThumbnailPreview) URL.revokeObjectURL(customThumbnailPreview);
+    setCustomThumbnail(f);
+    setCustomThumbnailPreview(URL.createObjectURL(f));
   };
 
   const handleFile = (f: File) => {
@@ -124,6 +155,7 @@ export default function VideoUpload() {
 
   const handleUpload = async () => {
     if (!file || !title.trim() || !accessToken) return;
+    if (scheduleMode && !scheduledAt) { setError('Please pick a publish date/time.'); return; }
     setUploading(true);
     setError('');
     setProgress(0);
@@ -135,12 +167,18 @@ export default function VideoUpload() {
       formData.append('description', description.trim());
       formData.append('category', category);
       tags.forEach((t) => formData.append('tags', t));
+      if (scheduleMode && scheduledAt) formData.append('scheduledAt', new Date(scheduledAt).toISOString());
 
-      const thumbnailBlob = await generateThumbnail(file);
-      if (thumbnailBlob) formData.append('thumbnail', thumbnailBlob, 'thumbnail.jpg');
+      if (customThumbnail) {
+        formData.append('thumbnail', customThumbnail);
+      } else {
+        const thumbnailBlob = await generateThumbnail(file);
+        if (thumbnailBlob) formData.append('thumbnail', thumbnailBlob, 'thumbnail.jpg');
+      }
 
       const video = await uploadVideo(formData, accessToken, setProgress);
       setDoneTitle(video.title);
+      setDoneScheduled(scheduleMode && !!scheduledAt);
       setDone(true);
     } catch (err: any) {
       setError(err.response?.data?.error?.message || 'Upload failed. Please try again.');
@@ -152,13 +190,24 @@ export default function VideoUpload() {
   if (done) {
     return (
       <div className="max-w-lg mx-auto text-center py-16">
-        <div className="w-20 h-20 rounded-full bg-green-100 dark:bg-green-500/10 flex items-center justify-center mx-auto mb-5">
-          <svg className="w-10 h-10 text-green-500" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
-          </svg>
+        <div className={`w-20 h-20 rounded-full flex items-center justify-center mx-auto mb-5 ${doneScheduled ? 'bg-indigo-100 dark:bg-indigo-500/10' : 'bg-green-100 dark:bg-green-500/10'}`}>
+          {doneScheduled ? (
+            <svg className="w-10 h-10 text-indigo-500" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+          ) : (
+            <svg className="w-10 h-10 text-green-500" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+            </svg>
+          )}
         </div>
-        <h2 className="text-2xl font-bold text-gray-900 dark:text-white">Video published!</h2>
+        <h2 className="text-2xl font-bold text-gray-900 dark:text-white">
+          {doneScheduled ? 'Video scheduled!' : 'Video published!'}
+        </h2>
         <p className="text-gray-400 dark:text-slate-500 text-sm mt-2 max-w-xs mx-auto">{doneTitle}</p>
+        {doneScheduled && scheduledAt && (
+          <p className="text-indigo-500 text-sm mt-1">Publishes on {new Date(scheduledAt).toLocaleString()}</p>
+        )}
         <div className="flex justify-center gap-3 mt-8">
           <button
             type="button"
@@ -322,6 +371,82 @@ export default function VideoUpload() {
             </div>
           </div>
 
+          {/* Custom Thumbnail */}
+          <div>
+            <label className="block text-sm font-semibold text-gray-700 dark:text-slate-300 mb-1.5">
+              Thumbnail <span className="text-gray-300 dark:text-slate-600 font-normal">(optional — auto-generated if skipped)</span>
+            </label>
+            <input
+              ref={thumbInputRef}
+              type="file"
+              accept="image/*"
+              disabled={uploading}
+              className="hidden"
+              onChange={(e) => { const f = e.target.files?.[0]; if (f) handleThumbFile(f); }}
+            />
+            {customThumbnailPreview ? (
+              <div className="relative w-full aspect-video rounded-xl overflow-hidden border border-gray-200 dark:border-slate-700 bg-black">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src={customThumbnailPreview} alt="Thumbnail preview" className="w-full h-full object-cover" />
+                {!uploading && (
+                  <button
+                    type="button"
+                    onClick={() => { setCustomThumbnail(null); URL.revokeObjectURL(customThumbnailPreview); setCustomThumbnailPreview(null); if (thumbInputRef.current) thumbInputRef.current.value = ''; }}
+                    className="absolute top-2 right-2 bg-black/60 hover:bg-black/80 text-white rounded-full p-1 transition-colors"
+                  >
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                  </button>
+                )}
+              </div>
+            ) : (
+              <button
+                type="button"
+                disabled={uploading}
+                onClick={() => thumbInputRef.current?.click()}
+                className="w-full aspect-video rounded-xl border-2 border-dashed border-gray-200 dark:border-slate-700 flex flex-col items-center justify-center gap-2 hover:border-indigo-300 hover:bg-indigo-50/30 dark:hover:bg-indigo-500/5 transition-all disabled:opacity-50"
+              >
+                <svg className="w-8 h-8 text-gray-300 dark:text-slate-600" fill="none" stroke="currentColor" strokeWidth={1.5} viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 15.75l5.159-5.159a2.25 2.25 0 013.182 0l5.159 5.159m-1.5-1.5l1.409-1.409a2.25 2.25 0 013.182 0l2.909 2.909m-18 3.75h16.5a1.5 1.5 0 001.5-1.5V6a1.5 1.5 0 00-1.5-1.5H3.75A1.5 1.5 0 002.25 6v12a1.5 1.5 0 001.5 1.5zm10.5-11.25h.008v.008h-.008V8.25zm.375 0a.375.375 0 11-.75 0 .375.375 0 01.75 0z" />
+                </svg>
+                <span className="text-sm text-gray-400 dark:text-slate-500">Upload custom thumbnail</span>
+                <span className="text-xs text-gray-300 dark:text-slate-600">JPG, PNG, WebP · max 10 MB</span>
+              </button>
+            )}
+          </div>
+
+          {/* Scheduled Publishing */}
+          <div className="border border-gray-200 dark:border-slate-700 rounded-xl p-4 space-y-3">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-semibold text-gray-700 dark:text-slate-300">Schedule for later</p>
+                <p className="text-xs text-gray-400 dark:text-slate-500 mt-0.5">Video won't be public until the chosen time</p>
+              </div>
+              <button
+                type="button"
+                disabled={uploading}
+                onClick={() => { setScheduleMode(!scheduleMode); setScheduledAt(''); }}
+                className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none disabled:opacity-50 ${scheduleMode ? 'bg-indigo-600' : 'bg-gray-200 dark:bg-slate-700'}`}
+              >
+                <span className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${scheduleMode ? 'translate-x-6' : 'translate-x-1'}`} />
+              </button>
+            </div>
+            {scheduleMode && (
+              <div>
+                <label className="block text-xs font-medium text-gray-500 dark:text-slate-400 mb-1">Publish date & time</label>
+                <input
+                  type="datetime-local"
+                  value={scheduledAt}
+                  min={minScheduleTime()}
+                  onChange={(e) => setScheduledAt(e.target.value)}
+                  disabled={uploading}
+                  className="w-full border border-gray-200 dark:border-slate-700 rounded-xl px-4 py-2.5 text-sm text-gray-900 dark:text-white bg-white dark:bg-slate-800 outline-none focus:ring-2 focus:ring-indigo-500 disabled:opacity-50"
+                />
+              </div>
+            )}
+          </div>
+
           {/* Progress */}
           {uploading && (
             <div className="bg-indigo-50 dark:bg-indigo-500/10 rounded-xl px-4 py-3">
@@ -352,7 +477,7 @@ export default function VideoUpload() {
           <button
             type="button"
             onClick={handleUpload}
-            disabled={uploading || !file || !title.trim()}
+            disabled={uploading || !file || !title.trim() || (scheduleMode && !scheduledAt)}
             className="w-full py-3 px-6 bg-indigo-600 text-white text-sm font-semibold rounded-xl hover:bg-indigo-700 disabled:opacity-40 disabled:cursor-not-allowed transition-all duration-200 active:scale-[0.98] shadow-lg shadow-indigo-200 dark:shadow-indigo-900/30"
           >
             {uploading ? (
@@ -363,7 +488,7 @@ export default function VideoUpload() {
                 </svg>
                 Uploading {progress}%...
               </span>
-            ) : 'Publish Video'}
+            ) : scheduleMode ? 'Schedule Video' : 'Publish Video'}
           </button>
 
           <p className="text-xs text-center text-gray-300 dark:text-slate-600">

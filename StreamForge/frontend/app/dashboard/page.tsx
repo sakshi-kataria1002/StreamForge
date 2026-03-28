@@ -244,12 +244,26 @@ export default function DashboardPage() {
                               <div className="w-full h-full flex items-center justify-center text-gray-400 dark:text-slate-600 text-sm">▶</div>
                             )}
                           </div>
-                          <p className="text-sm text-gray-800 dark:text-slate-200 font-medium line-clamp-1">{video.title}</p>
+                          <div className="min-w-0">
+                            <p className="text-sm text-gray-800 dark:text-slate-200 font-medium line-clamp-1">{video.title}</p>
+                            {video.status === 'scheduled' && video.scheduledAt && (
+                              <span className="inline-flex items-center gap-1 mt-0.5 text-xs text-indigo-500 dark:text-indigo-400">
+                                <svg className="w-3 h-3" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                </svg>
+                                Scheduled · {new Date(video.scheduledAt).toLocaleString()}
+                              </span>
+                            )}
+                          </div>
                         </div>
                       </td>
                       <td className="px-5 py-3 text-right text-sm text-gray-500 dark:text-slate-400 hidden sm:table-cell">{formatNumber(video.views)}</td>
                       <td className="px-5 py-3 text-right text-sm text-gray-500 dark:text-slate-400 hidden sm:table-cell">{video.likesCount ?? 0}</td>
-                      <td className="px-5 py-3 text-right text-sm text-gray-400 dark:text-slate-500 hidden md:table-cell">{timeAgo(video.createdAt)}</td>
+                      <td className="px-5 py-3 text-right text-sm text-gray-400 dark:text-slate-500 hidden md:table-cell">
+                        {video.status === 'scheduled' ? (
+                          <span className="px-2 py-0.5 rounded-full bg-indigo-100 dark:bg-indigo-500/15 text-indigo-600 dark:text-indigo-400 text-xs font-medium">Scheduled</span>
+                        ) : timeAgo(video.createdAt)}
+                      </td>
                       <td className="px-5 py-3 text-right">
                         <div className="flex items-center justify-end gap-2">
                           <Link
