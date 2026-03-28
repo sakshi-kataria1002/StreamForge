@@ -46,11 +46,24 @@ const videoSchema = new mongoose.Schema(
     },
     likes: [{ type: mongoose.Schema.Types.ObjectId, ref: 'User' }],
     dislikes: [{ type: mongoose.Schema.Types.ObjectId, ref: 'User' }],
+    category: {
+      type: String,
+      enum: ['Education', 'Entertainment', 'Gaming', 'Music', 'News', 'Sports', 'Technology', 'Travel', 'Other'],
+      default: 'Other',
+    },
+    tags: {
+      type: [String],
+      default: [],
+      validate: { validator: (arr) => arr.length <= 10, message: 'Max 10 tags allowed' },
+    },
   },
   { timestamps: true }
 );
 
 videoSchema.index({ owner: 1 });
 videoSchema.index({ createdAt: -1 });
+videoSchema.index({ views: -1 });
+videoSchema.index({ category: 1 });
+videoSchema.index({ tags: 1 });
 
 module.exports = mongoose.model('Video', videoSchema);

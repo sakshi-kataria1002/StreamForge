@@ -33,7 +33,7 @@ function AuthenticatedHome({ userName }: { userName: string }) {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    getVideos(1)
+    getVideos({ page: 1 })
       .then((res) => setVideos(res.videos))
       .catch(() => setVideos([]))
       .finally(() => setLoading(false));

@@ -1,9 +1,9 @@
 'use client';
 
-import { useState, useRef } from 'react';
+import { useState, useRef, KeyboardEvent } from 'react';
 import { useSelector } from 'react-redux';
 import Link from 'next/link';
-import { uploadVideo } from '../../../lib/api/video.api';
+import { uploadVideo, CATEGORIES } from '../../../lib/api/video.api';
 
 interface RootState {
   auth: { user: { id: string; name: string } | null; accessToken: string | null };
@@ -59,6 +59,9 @@ export default function VideoUpload() {
   const [file, setFile] = useState<File | null>(null);
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
+  const [category, setCategory] = useState('Other');
+  const [tags, setTags] = useState<string[]>([]);
+  const [tagInput, setTagInput] = useState('');
   const [progress, setProgress] = useState(0);
   const [uploading, setUploading] = useState(false);
   const [done, setDone] = useState(false);
@@ -81,10 +84,24 @@ export default function VideoUpload() {
     );
   }
 
+  const addTag = (raw: string) => {
+    const tag = raw.trim().toLowerCase().replace(/[^a-z0-9-]/g, '');
+    if (tag && !tags.includes(tag) && tags.length < 10) setTags((prev) => [...prev, tag]);
+    setTagInput('');
+  };
+
+  const handleTagKey = (e: KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Enter' || e.key === ',') { e.preventDefault(); addTag(tagInput); }
+    if (e.key === 'Backspace' && !tagInput && tags.length) setTags((prev) => prev.slice(0, -1));
+  };
+
   const reset = () => {
     setFile(null);
     setTitle('');
     setDescription('');
+    setCategory('Other');
+    setTags([]);
+    setTagInput('');
     setProgress(0);
     setUploading(false);
     setDone(false);
@@ -116,6 +133,8 @@ export default function VideoUpload() {
       formData.append('video', file);
       formData.append('title', title.trim());
       formData.append('description', description.trim());
+      formData.append('category', category);
+      tags.forEach((t) => formData.append('tags', t));
 
       const thumbnailBlob = await generateThumbnail(file);
       if (thumbnailBlob) formData.append('thumbnail', thumbnailBlob, 'thumbnail.jpg');
@@ -256,6 +275,51 @@ export default function VideoUpload() {
               placeholder="Tell viewers about your video..."
               className="w-full border border-gray-200 dark:border-slate-700 rounded-xl px-4 py-3 text-sm text-gray-900 dark:text-white bg-white dark:bg-slate-800 resize-none outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent disabled:bg-gray-50 dark:disabled:bg-slate-900 placeholder-gray-300 dark:placeholder-slate-600 transition-shadow"
             />
+          </div>
+
+          {/* Category */}
+          <div>
+            <label className="block text-sm font-semibold text-gray-700 dark:text-slate-300 mb-1.5">Category</label>
+            <select
+              value={category}
+              onChange={(e) => setCategory(e.target.value)}
+              disabled={uploading}
+              className="w-full border border-gray-200 dark:border-slate-700 rounded-xl px-4 py-3 text-sm text-gray-900 dark:text-white bg-white dark:bg-slate-800 outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent disabled:bg-gray-50 dark:disabled:bg-slate-900 transition-shadow"
+            >
+              {CATEGORIES.map((c) => <option key={c} value={c}>{c}</option>)}
+            </select>
+          </div>
+
+          {/* Tags */}
+          <div>
+            <label className="block text-sm font-semibold text-gray-700 dark:text-slate-300 mb-1.5">
+              Tags <span className="text-gray-300 dark:text-slate-600 font-normal">(optional · up to 10)</span>
+            </label>
+            <div
+              className="flex flex-wrap gap-1.5 min-h-[44px] w-full border border-gray-200 dark:border-slate-700 rounded-xl px-3 py-2 bg-white dark:bg-slate-800 focus-within:ring-2 focus-within:ring-indigo-500 cursor-text"
+              onClick={() => document.getElementById('tag-input')?.focus()}
+            >
+              {tags.map((t) => (
+                <span key={t} className="flex items-center gap-1 px-2 py-0.5 bg-indigo-100 dark:bg-indigo-500/20 text-indigo-700 dark:text-indigo-300 text-xs rounded-full font-medium">
+                  #{t}
+                  {!uploading && (
+                    <button type="button" onClick={() => setTags(tags.filter((x) => x !== t))} className="text-indigo-400 hover:text-indigo-600">×</button>
+                  )}
+                </span>
+              ))}
+              {tags.length < 10 && !uploading && (
+                <input
+                  id="tag-input"
+                  type="text"
+                  value={tagInput}
+                  onChange={(e) => setTagInput(e.target.value)}
+                  onKeyDown={handleTagKey}
+                  onBlur={() => tagInput && addTag(tagInput)}
+                  placeholder={tags.length === 0 ? 'Add tags (press Enter or comma)…' : ''}
+                  className="flex-1 min-w-[120px] text-sm text-gray-900 dark:text-white bg-transparent outline-none placeholder-gray-300 dark:placeholder-slate-600"
+                />
+              )}
+            </div>
           </div>
 
           {/* Progress */}

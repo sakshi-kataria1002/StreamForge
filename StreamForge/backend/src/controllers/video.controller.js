@@ -64,6 +64,13 @@ exports.uploadVideo = async (req, res) => {
     const fileUrl = `${baseUrl}/uploads/${videoFile.filename}`;
     const thumbnailUrl = thumbnailFile ? `${baseUrl}/uploads/${thumbnailFile.filename}` : undefined;
 
+    const rawTags = req.body.tags;
+    const tags = Array.isArray(rawTags)
+      ? rawTags.map((t) => t.trim()).filter(Boolean).slice(0, 10)
+      : typeof rawTags === 'string'
+      ? rawTags.split(',').map((t) => t.trim()).filter(Boolean).slice(0, 10)
+      : [];
+
     const video = await Video.create({
       title: title.trim(),
       description: description?.trim() || '',
@@ -72,6 +79,8 @@ exports.uploadVideo = async (req, res) => {
       fileUrl,
       ...(thumbnailUrl && { thumbnailUrl }),
       status: 'ready',
+      category: req.body.category || 'Other',
+      tags,
     });
 
     await video.populate('owner', 'name');
@@ -96,26 +105,85 @@ exports.uploadVideo = async (req, res) => {
   }
 };
 
-// GET /api/v1/videos  (public)
+// GET /api/v1/videos  (public — supports ?q=&category=&tag=&duration=&dateFrom=&sortBy=)
 exports.getVideos = async (req, res) => {
   try {
     const page = Math.max(1, parseInt(req.query.page) || 1);
     const limit = Math.min(100, parseInt(req.query.limit) || 20);
     const skip = (page - 1) * limit;
 
+    const filter = { status: 'ready' };
+
+    if (req.query.q) {
+      const safe = req.query.q.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      const re = { $regex: safe, $options: 'i' };
+      filter.$or = [{ title: re }, { description: re }, { tags: re }];
+    }
+    if (req.query.category) filter.category = req.query.category;
+    if (req.query.tag)      filter.tags = req.query.tag;
+    if (req.query.duration === 'short')  filter.duration = { $gt: 0, $lt: 240 };
+    if (req.query.duration === 'medium') filter.duration = { $gte: 240, $lte: 1200 };
+    if (req.query.duration === 'long')   filter.duration = { $gt: 1200 };
+    const dateMap = { today: 1, week: 7, month: 30 };
+    if (dateMap[req.query.dateFrom]) {
+      filter.createdAt = { $gte: new Date(Date.now() - dateMap[req.query.dateFrom] * 86400000) };
+    }
+
+    const sortMap = { views: { views: -1 }, oldest: { createdAt: 1 } };
+    const sort = sortMap[req.query.sortBy] || { createdAt: -1 };
+
     const [videos, total] = await Promise.all([
-      Video.find({ status: 'ready' })
-        .sort({ createdAt: -1 })
-        .skip(skip)
-        .limit(limit)
-        .populate('owner', 'name'),
-      Video.countDocuments({ status: 'ready' }),
+      Video.find(filter).sort(sort).skip(skip).limit(limit).populate('owner', 'name'),
+      Video.countDocuments(filter),
     ]);
 
     res.json({
       success: true,
       data: { videos, total, page, totalPages: Math.ceil(total / limit) },
     });
+  } catch (err) {
+    res.status(500).json({ success: false, error: { message: err.message } });
+  }
+};
+
+// GET /api/v1/videos/trending  (public)
+exports.getTrending = async (req, res) => {
+  try {
+    const videos = await Video.aggregate([
+      { $match: { status: 'ready' } },
+      { $addFields: { score: { $add: ['$views', { $multiply: [{ $size: { $ifNull: ['$likes', []] } }, 5] }] } } },
+      { $sort: { score: -1 } },
+      { $limit: 20 },
+      { $lookup: { from: 'users', localField: 'owner', foreignField: '_id', as: 'ownerArr' } },
+      { $unwind: { path: '$ownerArr', preserveNullAndEmptyArrays: true } },
+      { $addFields: { owner: { _id: '$ownerArr._id', name: '$ownerArr.name' } } },
+      { $project: { ownerArr: 0, score: 0 } },
+    ]);
+    res.json({ success: true, data: videos });
+  } catch (err) {
+    res.status(500).json({ success: false, error: { message: err.message } });
+  }
+};
+
+// GET /api/v1/videos/:id/related  (public)
+exports.getRelatedVideos = async (req, res) => {
+  try {
+    const video = await Video.findById(req.params.id).select('tags category owner');
+    if (!video) return res.status(404).json({ success: false, error: { message: 'Not found' } });
+
+    const related = await Video.find({
+      _id: { $ne: req.params.id },
+      status: 'ready',
+      $or: [
+        ...(video.tags?.length ? [{ tags: { $in: video.tags } }] : []),
+        { category: video.category },
+        { owner: video.owner },
+      ],
+    })
+      .limit(8)
+      .populate('owner', 'name');
+
+    res.json({ success: true, data: related });
   } catch (err) {
     res.status(500).json({ success: false, error: { message: err.message } });
   }
