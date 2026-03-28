@@ -27,6 +27,9 @@ router.get('/:id/save-status', protect, getSaveStatus);
 // AI Summary (open — no auth; generation is idempotent)
 router.post('/:id/summary', summaryController.generateSummary);
 
+// Thumbnail (owner-protected)
+router.post('/:id/thumbnail', protect, videoController.thumbnailUpload, videoController.uploadThumbnail);
+
 // Subtitles (owner-protected)
 router.post('/:id/subtitles', protect, subtitleController.subtitleUpload, subtitleController.uploadSubtitle);
 router.delete('/:id/subtitles', protect, subtitleController.deleteSubtitle);

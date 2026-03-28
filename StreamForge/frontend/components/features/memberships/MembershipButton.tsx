@@ -13,7 +13,8 @@ const TIERS = [
   { id: 'premium', label: 'Premium', price: 9.99, perks: 'Everything in Basic + exclusive content' },
 ] as const;
 
-export default function MembershipButton({ creatorId }: { creatorId: string }) {
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+export default function MembershipButton({ creatorId, creatorName: _creatorName }: { creatorId: string; creatorName?: string }) {
   const currentUser = useSelector((state: RootState) => state.auth.user);
   const accessToken = useSelector((state: RootState) => state.auth.accessToken);
 
