@@ -1,5 +1,7 @@
 const Subscription = require('../models/Subscription.model');
 const Video = require('../models/Video.model');
+const User = require('../models/User.model');
+const { sendNewSubscriberEmail } = require('../services/email.service');
 
 exports.toggleSubscribe = async (req, res) => {
   try {
@@ -21,6 +23,13 @@ exports.toggleSubscribe = async (req, res) => {
       await existing.deleteOne();
     } else {
       await Subscription.create({ subscriber: req.user.id, creator: creatorId });
+
+      try {
+        const creator = await User.findById(creatorId).select('email');
+        if (creator && creator.email) {
+          sendNewSubscriberEmail(creator.email, req.user.name).catch(() => {});
+        }
+      } catch { /* email failure must never surface to the client */ }
     }
 
     const subscriberCount = await Subscription.countDocuments({ creator: creatorId });

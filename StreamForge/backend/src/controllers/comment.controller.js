@@ -1,4 +1,7 @@
 const Comment = require('../models/Comment.model');
+const Video = require('../models/Video.model');
+const User = require('../models/User.model');
+const { sendNewCommentEmail } = require('../services/email.service');
 
 exports.addComment = async (req, res) => {
   try {
@@ -19,6 +22,16 @@ exports.addComment = async (req, res) => {
     });
 
     await comment.populate('author', 'name');
+
+    try {
+      const video = await Video.findById(videoId).select('title owner');
+      if (video) {
+        const owner = await User.findById(video.owner).select('email');
+        if (owner && owner.email && owner._id.toString() !== req.user.id.toString()) {
+          sendNewCommentEmail(owner.email, req.user.name, video.title, body.trim()).catch(() => {});
+        }
+      }
+    } catch { /* email failure must never surface to the client */ }
 
     res.status(201).json({ success: true, data: comment });
   } catch (err) {
