@@ -6,6 +6,7 @@ import { useSelector } from 'react-redux';
 import { getChannel, ChannelData } from '../../../lib/api/video.api';
 import { toggleSubscribe } from '../../../lib/api/subscription.api';
 import VideoCard from '../../../components/features/videos/VideoCard';
+import MembershipButton from '../../../components/features/memberships/MembershipButton';
 
 interface RootState {
   auth: { user: { id: string; name: string } | null; accessToken: string | null };
@@ -119,16 +120,19 @@ export default function ChannelPage() {
               </div>
             </div>
 
-            {/* Subscribe button */}
+            {/* Subscribe + Membership buttons */}
             {!isOwn && currentUser && (
-              <button type="button" onClick={handleSubscribe} disabled={subscribing}
-                className={`shrink-0 px-5 py-2 rounded-full text-sm font-semibold transition-colors disabled:opacity-60 ${
-                  channel.isSubscribed
-                    ? 'bg-gray-100 dark:bg-slate-800 text-gray-700 dark:text-slate-300 hover:bg-gray-200 dark:hover:bg-slate-700'
-                    : 'bg-indigo-600 text-white hover:bg-indigo-500'
-                }`}>
-                {subscribing ? '...' : channel.isSubscribed ? 'Subscribed' : 'Subscribe'}
-              </button>
+              <div className="shrink-0 flex items-center gap-2">
+                <button type="button" onClick={handleSubscribe} disabled={subscribing}
+                  className={`px-5 py-2 rounded-full text-sm font-semibold transition-colors disabled:opacity-60 ${
+                    channel.isSubscribed
+                      ? 'bg-gray-100 dark:bg-slate-800 text-gray-700 dark:text-slate-300 hover:bg-gray-200 dark:hover:bg-slate-700'
+                      : 'bg-indigo-600 text-white hover:bg-indigo-500'
+                  }`}>
+                  {subscribing ? '...' : channel.isSubscribed ? 'Subscribed' : 'Subscribe'}
+                </button>
+                <MembershipButton creatorId={channel._id} creatorName={channel.name} />
+              </div>
             )}
           </div>
         </div>
