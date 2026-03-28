@@ -19,6 +19,7 @@ const dashboardRoutes = require('./routes/dashboard.routes');
 const moderationRoutes = require('./routes/moderation.routes');
 const membershipRoutes = require('./routes/membership.routes');
 const livestreamRoutes = require('./routes/livestream.routes');
+const playlistRoutes = require('./routes/playlist.routes');
 
 const app = express();
 
@@ -44,6 +45,7 @@ app.use('/api/v1/dashboard', dashboardRoutes);
 app.use('/api/v1/moderation', moderationRoutes);
 app.use('/api/v1/memberships', membershipRoutes);
 app.use('/api/v1/livestreams', livestreamRoutes);
+app.use('/api/v1/playlists', playlistRoutes);
 
 // Health check
 app.get('/api/v1/health', (req, res) => res.json({ status: 'ok', timestamp: new Date() }));
