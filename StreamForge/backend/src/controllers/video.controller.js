@@ -71,6 +71,10 @@ exports.uploadVideo = async (req, res) => {
       ? rawTags.split(',').map((t) => t.trim()).filter(Boolean).slice(0, 10)
       : [];
 
+    // Scheduled publishing
+    const scheduledAt = req.body.scheduledAt ? new Date(req.body.scheduledAt) : null;
+    const isScheduled = scheduledAt && scheduledAt > new Date();
+
     const video = await Video.create({
       title: title.trim(),
       description: description?.trim() || '',
@@ -78,23 +82,26 @@ exports.uploadVideo = async (req, res) => {
       filePath: videoFile.path,
       fileUrl,
       ...(thumbnailUrl && { thumbnailUrl }),
-      status: 'ready',
+      status: isScheduled ? 'scheduled' : 'ready',
+      ...(isScheduled && { scheduledAt }),
       category: req.body.category || 'Other',
       tags,
     });
 
     await video.populate('owner', 'name');
 
-    // Notify all subscribers of this creator
-    const subs = await Subscription.find({ creator: req.user.id }).select('subscriber');
-    if (subs.length > 0) {
-      const notifications = subs.map((s) => ({
-        recipient: s.subscriber,
-        type: 'new_upload',
-        actor: req.user.id,
-        video: video._id,
-      }));
-      await Notification.insertMany(notifications);
+    // Notify subscribers only for immediately published videos
+    if (!isScheduled) {
+      const subs = await Subscription.find({ creator: req.user.id }).select('subscriber');
+      if (subs.length > 0) {
+        const notifications = subs.map((s) => ({
+          recipient: s.subscriber,
+          type: 'new_upload',
+          actor: req.user.id,
+          video: video._id,
+        }));
+        await Notification.insertMany(notifications);
+      }
     }
 
     res.status(201).json({ success: true, data: video });
@@ -112,7 +119,7 @@ exports.getVideos = async (req, res) => {
     const limit = Math.min(100, parseInt(req.query.limit) || 20);
     const skip = (page - 1) * limit;
 
-    const filter = { status: 'ready' };
+    const filter = { status: 'ready', $or: [{ scheduledAt: null }, { scheduledAt: { $lte: new Date() } }] };
 
     if (req.query.q) {
       const safe = req.query.q.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -150,7 +157,7 @@ exports.getVideos = async (req, res) => {
 exports.getTrending = async (req, res) => {
   try {
     const videos = await Video.aggregate([
-      { $match: { status: 'ready' } },
+      { $match: { status: 'ready', $or: [{ scheduledAt: null }, { scheduledAt: { $lte: new Date() } }] } },
       { $addFields: { score: { $add: ['$views', { $multiply: [{ $size: { $ifNull: ['$likes', []] } }, 5] }] } } },
       { $sort: { score: -1 } },
       { $limit: 20 },
@@ -312,6 +319,50 @@ exports.updateVideo = async (req, res) => {
     await video.populate('owner', 'name');
     res.json({ success: true, data: video });
   } catch (err) {
+    res.status(500).json({ success: false, error: { message: err.message } });
+  }
+};
+
+// POST /api/v1/videos/:id/thumbnail  (owner only — replace thumbnail)
+const thumbnailStorage = multer.diskStorage({
+  destination: (req, file, cb) => cb(null, uploadDir),
+  filename: (req, file, cb) => {
+    const ext = path.extname(file.originalname) || '.jpg';
+    cb(null, `thumb-${uuidv4()}${ext}`);
+  },
+});
+const thumbnailUploadMiddleware = multer({
+  storage: thumbnailStorage,
+  fileFilter: (req, file, cb) => {
+    if (file.mimetype.startsWith('image/')) cb(null, true);
+    else cb(new Error('Only image files allowed'), false);
+  },
+  limits: { fileSize: 10 * 1024 * 1024 },
+}).single('thumbnail');
+
+exports.thumbnailUpload = thumbnailUploadMiddleware;
+
+exports.uploadThumbnail = async (req, res) => {
+  try {
+    const video = await Video.findById(req.params.id);
+    if (!video) return res.status(404).json({ success: false, error: { message: 'Video not found' } });
+    if (video.owner.toString() !== req.user.id.toString()) {
+      return res.status(403).json({ success: false, error: { message: 'Access denied' } });
+    }
+    if (!req.file) return res.status(400).json({ success: false, error: { message: 'Image file required' } });
+
+    // Delete old thumbnail if local
+    if (video.thumbnailUrl && video.thumbnailUrl.includes('/uploads/')) {
+      const oldPath = path.join(uploadDir, path.basename(video.thumbnailUrl));
+      if (fs.existsSync(oldPath)) fs.unlinkSync(oldPath);
+    }
+
+    const baseUrl = process.env.BASE_URL || `http://localhost:${process.env.PORT || 5000}`;
+    video.thumbnailUrl = `${baseUrl}/uploads/${req.file.filename}`;
+    await video.save();
+    res.json({ success: true, data: { thumbnailUrl: video.thumbnailUrl } });
+  } catch (err) {
+    if (req.file) fs.unlinkSync(req.file.path);
     res.status(500).json({ success: false, error: { message: err.message } });
   }
 };

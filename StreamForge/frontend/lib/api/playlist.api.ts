@@ -55,7 +55,7 @@ export const getPlaylist = async (id: string, token?: string): Promise<Playlist>
 
 export const updatePlaylist = async (
   id: string,
-  payload: Partial<{ title: string; description: string; visibility: string }>,
+  payload: Partial<{ title: string; description: string; visibility: string; videos: string[] }>,
   token: string
 ): Promise<Playlist> => {
   const { data } = await api.patch(`/playlists/${id}`, payload, auth(token));

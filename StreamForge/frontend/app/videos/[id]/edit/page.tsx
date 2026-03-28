@@ -1,9 +1,9 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { useSelector } from 'react-redux';
-import { getVideo, updateVideo } from '../../../../lib/api/video.api';
+import { getVideo, updateVideo, uploadThumbnail } from '../../../../lib/api/video.api';
 import Link from 'next/link';
 import SubtitleUpload from '../../../../components/features/videos/SubtitleUpload';
 
@@ -19,10 +19,14 @@ export default function EditVideoPage() {
 
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
+  const [currentThumbnail, setCurrentThumbnail] = useState<string | null>(null);
+  const [newThumb, setNewThumb] = useState<File | null>(null);
+  const [newThumbPreview, setNewThumbPreview] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
   const [notFound, setNotFound] = useState(false);
+  const thumbRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     if (!user) { router.replace('/login'); return; }
@@ -32,10 +36,18 @@ export default function EditVideoPage() {
         if (v.owner?._id !== user.id) { router.replace('/dashboard'); return; }
         setTitle(v.title);
         setDescription(v.description || '');
+        setCurrentThumbnail(v.thumbnailUrl ?? null);
       })
       .catch(() => setNotFound(true))
       .finally(() => setLoading(false));
   }, [id, user, router]);
+
+  const handleThumbPick = (f: File) => {
+    if (!f.type.startsWith('image/')) return;
+    if (newThumbPreview) URL.revokeObjectURL(newThumbPreview);
+    setNewThumb(f);
+    setNewThumbPreview(URL.createObjectURL(f));
+  };
 
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -44,6 +56,13 @@ export default function EditVideoPage() {
     setSaving(true);
     setError('');
     try {
+      if (newThumb) {
+        const { thumbnailUrl } = await uploadThumbnail(id, newThumb, accessToken);
+        setCurrentThumbnail(thumbnailUrl);
+        setNewThumb(null);
+        if (newThumbPreview) URL.revokeObjectURL(newThumbPreview);
+        setNewThumbPreview(null);
+      }
       await updateVideo(id, { title: title.trim(), description: description.trim() }, accessToken);
       router.push('/dashboard');
     } catch {
@@ -99,6 +118,47 @@ export default function EditVideoPage() {
               {error}
             </div>
           )}
+          {/* Thumbnail */}
+          <div className="mb-6">
+            <h2 className="text-sm font-semibold text-gray-700 dark:text-slate-300 mb-3">Thumbnail</h2>
+            <input
+              ref={thumbRef}
+              type="file"
+              accept="image/*"
+              className="hidden"
+              onChange={(e) => { const f = e.target.files?.[0]; if (f) handleThumbPick(f); }}
+            />
+            <div className="relative w-full max-w-xs aspect-video rounded-xl overflow-hidden bg-gray-200 dark:bg-slate-800 border border-gray-200 dark:border-slate-700 mb-3">
+              {(newThumbPreview ?? currentThumbnail) ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={newThumbPreview ?? currentThumbnail!} alt="Thumbnail" className="w-full h-full object-cover" />
+              ) : (
+                <div className="w-full h-full flex items-center justify-center text-gray-400 dark:text-slate-600 text-sm">No thumbnail</div>
+              )}
+              {newThumbPreview && (
+                <span className="absolute top-2 left-2 px-2 py-0.5 rounded-full bg-indigo-600 text-white text-xs font-medium">New</span>
+              )}
+            </div>
+            <div className="flex items-center gap-3">
+              <button
+                type="button"
+                onClick={() => thumbRef.current?.click()}
+                className="px-4 py-2 rounded-xl bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-700 hover:bg-gray-100 dark:hover:bg-slate-700 text-sm font-medium text-gray-700 dark:text-slate-300 transition-colors"
+              >
+                {currentThumbnail ? 'Replace thumbnail' : 'Upload thumbnail'}
+              </button>
+              {newThumb && (
+                <button
+                  type="button"
+                  onClick={() => { setNewThumb(null); if (newThumbPreview) URL.revokeObjectURL(newThumbPreview); setNewThumbPreview(null); if (thumbRef.current) thumbRef.current.value = ''; }}
+                  className="text-sm text-red-400 hover:text-red-500 transition-colors"
+                >
+                  Remove
+                </button>
+              )}
+            </div>
+          </div>
+
           <SubtitleUpload videoId={id!} />
 
           <form onSubmit={handleSave} className="space-y-5 mt-6">
