@@ -113,8 +113,10 @@ function AuthenticatedHome({ userName }: { userName: string }) {
                   <div className="w-1 h-5 bg-indigo-500 rounded-full" />
                   <h2 className="text-gray-900 dark:text-white font-semibold text-base">Latest Upload</h2>
                 </div>
-                <Link href={`/videos/${featured._id}`} className="block group">
-                  <div className="relative w-full rounded-2xl overflow-hidden aspect-[16/7] bg-gray-900">
+
+                <div className="group relative w-full rounded-2xl overflow-hidden bg-gray-900 shadow-xl">
+                  {/* Thumbnail */}
+                  <Link href={`/videos/${featured._id}`} className="block aspect-[16/7] overflow-hidden">
                     {featured.thumbnailUrl ? (
                       <img
                         src={featured.thumbnailUrl}
@@ -129,13 +131,18 @@ function AuthenticatedHome({ userName }: { userName: string }) {
                       </div>
                     )}
                     {/* Gradient overlay */}
-                    <div className="absolute inset-0 bg-gradient-to-t from-black/75 via-black/20 to-transparent" />
-                    {/* Play badge */}
+                    <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/30 to-transparent" />
+                    {/* Latest badge */}
                     <div className="absolute top-4 left-4 flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-black/50 backdrop-blur-sm border border-white/10 text-white text-xs font-medium">
                       <span className="w-1.5 h-1.5 rounded-full bg-indigo-400 animate-pulse" />
                       Latest
                     </div>
-                    {/* Play button on hover */}
+                    {featured.category && (
+                      <div className="absolute top-4 right-4 px-2.5 py-1 rounded-full bg-white/10 backdrop-blur-sm border border-white/10 text-white text-xs font-medium">
+                        {featured.category}
+                      </div>
+                    )}
+                    {/* Play button */}
                     <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity duration-200">
                       <div className="w-16 h-16 rounded-full bg-white/20 backdrop-blur-sm border border-white/30 flex items-center justify-center">
                         <svg className="w-7 h-7 text-white ml-1" fill="currentColor" viewBox="0 0 24 24">
@@ -143,14 +150,44 @@ function AuthenticatedHome({ userName }: { userName: string }) {
                         </svg>
                       </div>
                     </div>
-                    {/* Info overlay */}
-                    <div className="absolute bottom-0 left-0 right-0 p-6">
-                      <p className="text-indigo-300 text-xs font-medium mb-1.5">{featured.owner?.name ?? 'Unknown creator'}</p>
-                      <h3 className="text-xl sm:text-2xl font-bold text-white leading-tight line-clamp-2">{featured.title}</h3>
-                      <p className="text-gray-400 text-sm mt-2">{formatViews(featured.views)} views</p>
+                  </Link>
+
+                  {/* Info bar — below the image, clear background */}
+                  <div className="absolute bottom-0 left-0 right-0 px-5 py-4 flex items-end justify-between gap-4">
+                    {/* Left: creator + title */}
+                    <div className="min-w-0">
+                      {/* Creator row — separate link, stops propagation from video link */}
+                      <Link
+                        href={featured.owner?._id ? `/channel/${featured.owner._id}` : '#'}
+                        onClick={(e) => e.stopPropagation()}
+                        className="inline-flex items-center gap-2 mb-2 group/creator"
+                      >
+                        <div className="w-7 h-7 rounded-full bg-indigo-500 flex items-center justify-center text-white text-xs font-bold shrink-0">
+                          {(featured.owner?.name ?? '?').charAt(0).toUpperCase()}
+                        </div>
+                        <span className="text-indigo-300 text-sm font-semibold group-hover/creator:text-white transition-colors truncate">
+                          {featured.owner?.name ?? 'Unknown creator'}
+                        </span>
+                      </Link>
+                      <Link href={`/videos/${featured._id}`} className="block">
+                        <h3 className="text-lg sm:text-2xl font-bold text-white leading-tight line-clamp-2 hover:text-indigo-200 transition-colors">
+                          {featured.title}
+                        </h3>
+                      </Link>
+                      <p className="text-gray-400 text-xs mt-1.5">{formatViews(featured.views)} views</p>
                     </div>
+                    {/* Right: watch button */}
+                    <Link
+                      href={`/videos/${featured._id}`}
+                      className="shrink-0 flex items-center gap-2 px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-semibold transition-colors shadow-lg"
+                    >
+                      <svg className="w-4 h-4 ml-0.5" fill="currentColor" viewBox="0 0 24 24">
+                        <path d="M8 5v14l11-7z" />
+                      </svg>
+                      Watch
+                    </Link>
                   </div>
-                </Link>
+                </div>
               </div>
             )}
 
