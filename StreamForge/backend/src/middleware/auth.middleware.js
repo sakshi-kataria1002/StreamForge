@@ -23,7 +23,7 @@ exports.protect = async (req, res, next) => {
       });
     }
 
-    req.user = { id: user._id, name: user.name, email: user.email };
+    req.user = { id: user._id, name: user.name, email: user.email, role: user.role };
     next();
   } catch (err) {
     res.status(401).json({
@@ -41,7 +41,7 @@ exports.optionalProtect = async (req, res, next) => {
     const token = authHeader.split(' ')[1];
     const decoded = jwt.verify(token, process.env.JWT_ACCESS_SECRET);
     const user = await User.findById(decoded.id);
-    if (user) req.user = { id: user._id, name: user.name, email: user.email };
+    if (user) req.user = { id: user._id, name: user.name, email: user.email, role: user.role };
   } catch {
     // silently ignore invalid tokens
   }

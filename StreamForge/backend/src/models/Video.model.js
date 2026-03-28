@@ -56,6 +56,14 @@ const videoSchema = new mongoose.Schema(
       default: [],
       validate: { validator: (arr) => arr.length <= 10, message: 'Max 10 tags allowed' },
     },
+    summary: {
+      type: String,
+      default: null,
+    },
+    subtitleUrl: {
+      type: String,
+      default: null,
+    },
   },
   { timestamps: true }
 );
