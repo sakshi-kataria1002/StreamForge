@@ -150,6 +150,31 @@ exports.getVideo = async (req, res) => {
   }
 };
 
+// GET /api/v1/videos/liked  (protected — current user's liked videos)
+exports.getLikedVideos = async (req, res) => {
+  try {
+    const page = Math.max(1, parseInt(req.query.page) || 1);
+    const limit = Math.min(100, parseInt(req.query.limit) || 20);
+    const skip = (page - 1) * limit;
+
+    const [videos, total] = await Promise.all([
+      Video.find({ likes: req.user.id, status: 'ready' })
+        .sort({ createdAt: -1 })
+        .skip(skip)
+        .limit(limit)
+        .populate('owner', 'name'),
+      Video.countDocuments({ likes: req.user.id, status: 'ready' }),
+    ]);
+
+    res.json({
+      success: true,
+      data: { videos, total, page, totalPages: Math.ceil(total / limit) },
+    });
+  } catch (err) {
+    res.status(500).json({ success: false, error: { message: err.message } });
+  }
+};
+
 // GET /api/v1/users/:userId/videos  (public — user's uploaded videos)
 exports.getUserVideos = async (req, res) => {
   try {

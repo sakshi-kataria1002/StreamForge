@@ -2,6 +2,7 @@
 
 import { useState, useRef } from 'react';
 import { useSelector } from 'react-redux';
+import Link from 'next/link';
 import { uploadVideo } from '../../../lib/api/video.api';
 
 interface RootState {
@@ -147,12 +148,12 @@ export default function VideoUpload() {
           >
             Upload another
           </button>
-          <a
+          <Link
             href="/feed"
             className="px-5 py-2.5 rounded-xl bg-gray-100 dark:bg-slate-800 text-gray-700 dark:text-slate-300 text-sm font-semibold hover:bg-gray-200 dark:hover:bg-slate-700 transition-colors"
           >
             Go to feed
-          </a>
+          </Link>
         </div>
       </div>
     );

@@ -182,6 +182,10 @@ function AuthenticatedHome({ userName }: { userName: string }) {
 
 export default function HomePage() {
   const user = useSelector((state: RootState) => state.auth.user);
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => setMounted(true), []);
+
+  if (!mounted) return null;
 
   if (user) return <AuthenticatedHome userName={user.name} />;
 

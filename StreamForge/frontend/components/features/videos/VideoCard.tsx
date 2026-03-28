@@ -1,3 +1,6 @@
+'use client';
+
+import { useState } from 'react';
 import Link from 'next/link';
 import { Video } from '../../../lib/api/video.api';
 
@@ -20,18 +23,32 @@ interface VideoCardProps {
   video: Video;
 }
 
+function ThumbnailPlaceholder({ title }: { title: string }) {
+  return (
+    <div className="w-full h-full flex flex-col items-center justify-center gap-2 bg-gradient-to-br from-slate-100 to-slate-200 dark:from-slate-700 dark:to-slate-800">
+      <svg className="w-10 h-10 text-slate-400 dark:text-slate-500" fill="none" stroke="currentColor" strokeWidth={1.5} viewBox="0 0 24 24">
+        <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 10.5l4.72-4.72a.75.75 0 011.28.53v11.38a.75.75 0 01-1.28.53l-4.72-4.72M4.5 18.75h9a2.25 2.25 0 002.25-2.25v-9a2.25 2.25 0 00-2.25-2.25h-9A2.25 2.25 0 002.25 7.5v9a2.25 2.25 0 002.25 2.25z" />
+      </svg>
+      <span className="text-[11px] text-slate-400 dark:text-slate-500 font-medium px-4 text-center line-clamp-2 leading-tight">{title}</span>
+    </div>
+  );
+}
+
 export default function VideoCard({ video }: VideoCardProps) {
+  const [thumbError, setThumbError] = useState(false);
+
   return (
     <Link href={`/videos/${video._id}`} className="cursor-pointer group rounded-xl overflow-hidden bg-white dark:bg-slate-800 shadow-sm hover:shadow-md dark:shadow-none dark:hover:bg-slate-700/80 transition-all duration-200 block border border-gray-100 dark:border-slate-700/50">
       {/* Thumbnail */}
       <div className="relative w-full aspect-video bg-gray-100 dark:bg-slate-700">
-        {video.thumbnailUrl ? (
+        {video.thumbnailUrl && !thumbError ? (
           <img
             src={video.thumbnailUrl}
             alt={video.title}
             className="w-full h-full object-cover"
+            onError={() => setThumbError(true)}
           />
-        ) : video.fileUrl ? (
+        ) : video.fileUrl && !thumbError ? (
           <video
             src={video.fileUrl}
             className="w-full h-full object-cover"
@@ -41,11 +58,10 @@ export default function VideoCard({ video }: VideoCardProps) {
             onLoadedMetadata={(e) => {
               (e.currentTarget as HTMLVideoElement).currentTime = 1;
             }}
+            onError={() => setThumbError(true)}
           />
         ) : (
-          <div className="w-full h-full flex items-center justify-center text-gray-400 dark:text-slate-500 text-4xl">
-            ▶
-          </div>
+          <ThumbnailPlaceholder title={video.title} />
         )}
         {video.status !== 'ready' && (
           <span className="absolute top-2 left-2 text-xs font-medium bg-amber-100 text-amber-700 px-2 py-0.5 rounded-full">

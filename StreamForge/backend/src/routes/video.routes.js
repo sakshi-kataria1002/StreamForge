@@ -6,6 +6,7 @@ const { protect, optionalProtect } = require('../middleware/auth.middleware');
 
 // Public (with optional auth for like/save state)
 router.get('/', videoController.getVideos);
+router.get('/liked', protect, videoController.getLikedVideos);
 router.get('/:id', optionalProtect, videoController.getVideo);
 
 // Protected

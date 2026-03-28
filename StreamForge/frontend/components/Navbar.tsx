@@ -27,11 +27,14 @@ export default function Navbar() {
   const { theme, toggleTheme } = useTheme();
   const { toggle: toggleSidebar } = useSidebar();
 
+  const [mounted, setMounted] = useState(false);
   const [scrolled, setScrolled] = useState(false);
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [unreadCount, setUnreadCount] = useState(0);
   const [notifOpen, setNotifOpen] = useState(false);
   const [userMenuOpen, setUserMenuOpen] = useState(false);
+
+  useEffect(() => setMounted(true), []);
 
   const notifRef = useRef<HTMLDivElement>(null);
   const userMenuRef = useRef<HTMLDivElement>(null);
@@ -134,7 +137,7 @@ export default function Navbar() {
             )}
           </button>
 
-          {user ? (
+          {mounted && user ? (
             <>
               {/* Subtle separator */}
               <div className="w-px h-5 bg-gray-200 dark:bg-slate-700/80 mx-1.5" />
@@ -324,7 +327,7 @@ export default function Navbar() {
                 )}
               </div>
             </>
-          ) : (
+          ) : mounted ? (
             <>
               <div className="w-px h-5 bg-gray-200 dark:bg-slate-700/80 mx-1.5" />
               <Link
@@ -343,7 +346,7 @@ export default function Navbar() {
                 </svg>
               </Link>
             </>
-          )}
+          ) : null}
         </div>
       </div>
     </nav>
