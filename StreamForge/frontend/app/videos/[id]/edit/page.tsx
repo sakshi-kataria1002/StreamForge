@@ -5,6 +5,7 @@ import { useParams, useRouter } from 'next/navigation';
 import { useSelector } from 'react-redux';
 import { getVideo, updateVideo } from '../../../../lib/api/video.api';
 import Link from 'next/link';
+import SubtitleUpload from '../../../../components/features/videos/SubtitleUpload';
 
 interface RootState {
   auth: { user: { id: string; name: string } | null; accessToken: string | null };
@@ -98,7 +99,9 @@ export default function EditVideoPage() {
               {error}
             </div>
           )}
-          <form onSubmit={handleSave} className="space-y-5">
+          <SubtitleUpload videoId={id!} />
+
+          <form onSubmit={handleSave} className="space-y-5 mt-6">
             <div>
               <label htmlFor="video-title" className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-2">Title</label>
               <input

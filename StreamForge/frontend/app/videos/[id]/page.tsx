@@ -9,6 +9,9 @@ import { toggleSave, getSaveStatus } from '../../../lib/api/saved.api';
 import { getComments, addComment, deleteComment, Comment } from '../../../lib/api/comment.api';
 import { getSubscriptionStatus, toggleSubscribe } from '../../../lib/api/subscription.api';
 import Link from 'next/link';
+import VideoSummary from '../../../components/features/videos/VideoSummary';
+import CaptionToggle from '../../../components/features/videos/CaptionToggle';
+import ReportButton from '../../../components/features/moderation/ReportButton';
 
 interface RootState {
   auth: { user: { id: string; name: string } | null; accessToken: string | null };
@@ -246,7 +249,7 @@ export default function WatchPage() {
           )}
 
           {/* Video player */}
-          <div className="w-full rounded-2xl overflow-hidden bg-black shadow-lg">
+          <div className="relative w-full rounded-2xl overflow-hidden bg-black shadow-lg">
             {videoError ? (
               <div className="w-full aspect-video flex flex-col items-center justify-center bg-gray-900 text-gray-400 gap-3">
                 <svg className="w-12 h-12" fill="none" stroke="currentColor" strokeWidth={1.5} viewBox="0 0 24 24">
@@ -259,25 +262,28 @@ export default function WatchPage() {
                 </a>
               </div>
             ) : (
-              <video
-                ref={videoRef}
-                src={video.fileUrl}
-                controls
-                className="w-full aspect-video"
-                onError={() => setVideoError(true)}
-                onTimeUpdate={(e) => {
-                  const t = e.currentTarget.currentTime;
-                  const dur = e.currentTarget.duration;
-                  if (!dur || t < 5) return;
-                  if (progressSaveTimer.current) clearTimeout(progressSaveTimer.current);
-                  progressSaveTimer.current = setTimeout(() => {
-                    if (dur - t > 10) localStorage.setItem(`sf_progress_${id}`, String(t));
-                    else localStorage.removeItem(`sf_progress_${id}`);
-                  }, 3000);
-                }}
-              >
-                Your browser does not support the video tag.
-              </video>
+              <>
+                <video
+                  ref={videoRef}
+                  src={video.fileUrl}
+                  controls
+                  className="w-full aspect-video"
+                  onError={() => setVideoError(true)}
+                  onTimeUpdate={(e) => {
+                    const t = e.currentTarget.currentTime;
+                    const dur = e.currentTarget.duration;
+                    if (!dur || t < 5) return;
+                    if (progressSaveTimer.current) clearTimeout(progressSaveTimer.current);
+                    progressSaveTimer.current = setTimeout(() => {
+                      if (dur - t > 10) localStorage.setItem(`sf_progress_${id}`, String(t));
+                      else localStorage.removeItem(`sf_progress_${id}`);
+                    }, 3000);
+                  }}
+                >
+                  Your browser does not support the video tag.
+                </video>
+                <CaptionToggle videoRef={videoRef} subtitleUrl={(video as any).subtitleUrl ?? null} />
+              </>
             )}
           </div>
 
@@ -348,6 +354,9 @@ export default function WatchPage() {
                   {saved ? 'Saved' : 'Save'}
                 </button>
                 <span className="text-xs text-gray-400 dark:text-slate-500 ml-1">{formatViews(video.views)} views · {timeAgo(video.createdAt)}</span>
+                {currentUser && !isOwner && (
+                  <ReportButton targetId={video._id} targetType="video" />
+                )}
               </div>
             </div>
 
@@ -356,6 +365,8 @@ export default function WatchPage() {
                 {video.description}
               </div>
             )}
+
+            <VideoSummary videoId={video._id} initialSummary={(video as any).summary ?? null} />
           </div>
 
           {/* Comments */}
