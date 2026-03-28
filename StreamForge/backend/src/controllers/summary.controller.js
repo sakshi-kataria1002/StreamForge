@@ -43,6 +43,19 @@ exports.generateSummary = async (req, res) => {
 
     res.json({ success: true, data: { summary, cached: false } });
   } catch (err) {
+    const msg = err.message || '';
+    if (msg.includes('credit balance is too low') || msg.includes('insufficient_quota')) {
+      return res.status(402).json({
+        success: false,
+        error: { code: 'INSUFFICIENT_CREDITS', message: 'AI summaries are unavailable — the Anthropic API account has insufficient credits.' },
+      });
+    }
+    if (msg.includes('invalid x-api-key') || msg.includes('authentication_error')) {
+      return res.status(401).json({
+        success: false,
+        error: { code: 'INVALID_API_KEY', message: 'AI summaries are unavailable — invalid Anthropic API key.' },
+      });
+    }
     res.status(500).json({ success: false, error: { message: err.message } });
   }
 };

@@ -36,6 +36,7 @@ export interface VideoFilters {
   dateFrom?: 'today' | 'week' | 'month';
   sortBy?: 'newest' | 'oldest' | 'views';
   page?: number;
+  excludeOwner?: string;
 }
 
 export const uploadVideo = async (

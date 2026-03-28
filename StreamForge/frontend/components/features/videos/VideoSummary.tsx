@@ -53,12 +53,15 @@ export default function VideoSummary({ videoId, initialSummary }: VideoSummaryPr
       const result = await generateVideoSummary(videoId);
       setSummary(result.summary);
     } catch (err: unknown) {
-      const message =
-        err instanceof Error
-          ? err.message
-          : (err as { response?: { data?: { error?: { message?: string } } } })?.response?.data
-              ?.error?.message ?? 'Failed to generate summary. Please try again.';
-      setError(message);
+      const apiError = (err as { response?: { data?: { error?: { code?: string; message?: string } } } })
+        ?.response?.data?.error;
+      if (apiError?.code === 'INSUFFICIENT_CREDITS') {
+        setError('AI summaries are currently unavailable (API credits exhausted).');
+      } else if (apiError?.code === 'INVALID_API_KEY') {
+        setError('AI summaries are currently unavailable (API key not configured).');
+      } else {
+        setError(apiError?.message ?? 'Failed to generate summary. Please try again.');
+      }
     } finally {
       setLoading(false);
     }
@@ -66,29 +69,29 @@ export default function VideoSummary({ videoId, initialSummary }: VideoSummaryPr
 
   return (
     <section
-      className="rounded-xl bg-slate-800/50 border border-slate-700/60 p-4 space-y-3"
+      className="rounded-xl bg-gray-100 dark:bg-slate-800/50 border border-gray-200 dark:border-slate-700/60 p-4 space-y-3"
       aria-label="AI-generated video summary"
     >
       <div className="flex items-center gap-2">
-        <span className="text-indigo-400">
+        <span className="text-indigo-500 dark:text-indigo-400">
           <SparkleIcon />
         </span>
-        <h3 className="text-sm font-semibold text-slate-200 tracking-wide uppercase">
+        <h3 className="text-sm font-semibold text-gray-700 dark:text-slate-200 tracking-wide uppercase">
           AI Summary
         </h3>
-        <span className="ml-auto text-xs text-slate-500">Powered by Claude</span>
+        <span className="ml-auto text-xs text-gray-400 dark:text-slate-500">Powered by Claude</span>
       </div>
 
       {summary ? (
-        <p className="text-sm text-slate-300 leading-relaxed">{summary}</p>
+        <p className="text-sm text-gray-700 dark:text-slate-300 leading-relaxed">{summary}</p>
       ) : loading ? (
-        <div className="flex items-center gap-2 text-slate-400 text-sm py-1">
+        <div className="flex items-center gap-2 text-gray-500 dark:text-slate-400 text-sm py-1">
           <SpinnerIcon />
           <span>Generating summary…</span>
         </div>
       ) : (
         <div className="space-y-2">
-          <p className="text-sm text-slate-400">
+          <p className="text-sm text-gray-500 dark:text-slate-400">
             No summary yet. Generate one with AI to get a quick overview of this video.
           </p>
           <button
@@ -115,7 +118,7 @@ export default function VideoSummary({ videoId, initialSummary }: VideoSummaryPr
         <button
           onClick={handleGenerate}
           disabled={loading}
-          className="inline-flex items-center gap-1 text-xs text-slate-500 hover:text-indigo-400
+          className="inline-flex items-center gap-1 text-xs text-gray-400 dark:text-slate-500 hover:text-indigo-500 dark:hover:text-indigo-400
                      disabled:opacity-50 disabled:cursor-not-allowed transition-colors duration-150"
           title="Regenerate summary"
         >

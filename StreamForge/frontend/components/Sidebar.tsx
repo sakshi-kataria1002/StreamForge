@@ -193,7 +193,7 @@ function SidebarContent({ onNavigate }: { onNavigate: () => void }) {
 
   return (
     <div className="flex flex-col h-full">
-      <nav className="flex-1 px-3 pt-5 space-y-5 overflow-y-auto">
+      <nav className="flex-1 px-3 pt-5 space-y-5 overflow-y-hidden">
         <NavGroup label="Discover" items={mainNav} pathname={pathname} onNavigate={onNavigate} />
         <NavGroup label="Library" items={libraryNav} pathname={pathname} onNavigate={onNavigate} />
         <NavGroup label="Creator" items={creatorNav} pathname={pathname} onNavigate={onNavigate} />
@@ -258,7 +258,7 @@ export default function Sidebar() {
       )}
 
       {/* Desktop sidebar — always visible on lg+ */}
-      <aside className="hidden lg:flex fixed left-0 top-16 h-[calc(100vh-4rem)] w-56 bg-white dark:bg-slate-900 border-r border-gray-200 dark:border-slate-800 flex-col z-40">
+      <aside className="hidden lg:flex fixed left-0 top-16 h-[calc(100vh-4rem)] w-64 bg-white dark:bg-slate-900 border-r border-gray-200 dark:border-slate-800 flex-col z-40">
         <SidebarContent onNavigate={() => {}} />
       </aside>
 
