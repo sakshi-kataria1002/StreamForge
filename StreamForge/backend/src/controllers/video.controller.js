@@ -1,24 +1,19 @@
-const path = require('path');
-const fs = require('fs');
-const { v4: uuidv4 } = require('uuid');
+const { v2: cloudinary } = require('cloudinary');
 const multer = require('multer');
+const streamifier = require('streamifier');
 const Video = require('../models/Video.model');
 const WatchHistory = require('../models/WatchHistory.model');
 const Notification = require('../models/Notification.model');
 const Subscription = require('../models/Subscription.model');
 
-// ── Multer storage config ──────────────────────────────────────────
-const uploadDir = path.join(__dirname, '../../uploads');
-if (!fs.existsSync(uploadDir)) fs.mkdirSync(uploadDir, { recursive: true });
-
-const storage = multer.diskStorage({
-  destination: (req, file, cb) => cb(null, uploadDir),
-  filename: (req, file, cb) => {
-    const ext = path.extname(file.originalname);
-    cb(null, `${uuidv4()}${ext}`);
-  },
+// ── Cloudinary config ──────────────────────────────────────────────
+cloudinary.config({
+  cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
+  api_key:    process.env.CLOUDINARY_API_KEY,
+  api_secret: process.env.CLOUDINARY_API_SECRET,
 });
 
+// ── Multer — memory storage (no disk, buffers go straight to Cloudinary) ──
 const fileFilter = (req, file, cb) => {
   if (file.mimetype.startsWith('video/') || file.mimetype.startsWith('image/')) {
     cb(null, true);
@@ -27,42 +22,56 @@ const fileFilter = (req, file, cb) => {
   }
 };
 
-// 500 MB max
-const upload = multer({ storage, fileFilter, limits: { fileSize: 500 * 1024 * 1024 } });
+const upload = multer({ storage: multer.memoryStorage(), fileFilter, limits: { fileSize: 500 * 1024 * 1024 } });
 exports.upload = upload;
 exports.uploadFields = upload.fields([
   { name: 'video', maxCount: 1 },
   { name: 'thumbnail', maxCount: 1 },
 ]);
 
+// ── Helper: upload buffer to Cloudinary ───────────────────────────
+function uploadToCloudinary(buffer, options) {
+  return new Promise((resolve, reject) => {
+    const stream = cloudinary.uploader.upload_stream(options, (error, result) => {
+      if (error) return reject(error);
+      resolve(result);
+    });
+    streamifier.createReadStream(buffer).pipe(stream);
+  });
+}
+
 // ── Controllers ───────────────────────────────────────────────────
 
-// POST /api/v1/videos  (multipart/form-data: file, title, description)
+// POST /api/v1/videos
 exports.uploadVideo = async (req, res) => {
   try {
     const videoFile = req.files?.['video']?.[0];
     const thumbnailFile = req.files?.['thumbnail']?.[0];
 
     if (!videoFile) {
-      return res.status(400).json({
-        success: false,
-        error: { code: 'NO_FILE', message: 'Video file is required' },
-      });
+      return res.status(400).json({ success: false, error: { code: 'NO_FILE', message: 'Video file is required' } });
     }
 
     const { title, description } = req.body;
     if (!title || !title.trim()) {
-      fs.unlinkSync(videoFile.path);
-      if (thumbnailFile) fs.unlinkSync(thumbnailFile.path);
-      return res.status(400).json({
-        success: false,
-        error: { code: 'NO_TITLE', message: 'Title is required' },
-      });
+      return res.status(400).json({ success: false, error: { code: 'NO_TITLE', message: 'Title is required' } });
     }
 
-    const baseUrl = process.env.BASE_URL || `http://localhost:${process.env.PORT || 5000}`;
-    const fileUrl = `${baseUrl}/uploads/${videoFile.filename}`;
-    const thumbnailUrl = thumbnailFile ? `${baseUrl}/uploads/${thumbnailFile.filename}` : undefined;
+    // Upload video to Cloudinary
+    const videoResult = await uploadToCloudinary(videoFile.buffer, {
+      resource_type: 'video',
+      folder: 'streamforge/videos',
+    });
+
+    // Upload thumbnail to Cloudinary (if provided)
+    let thumbnailUrl;
+    if (thumbnailFile) {
+      const thumbResult = await uploadToCloudinary(thumbnailFile.buffer, {
+        resource_type: 'image',
+        folder: 'streamforge/thumbnails',
+      });
+      thumbnailUrl = thumbResult.secure_url;
+    }
 
     const rawTags = req.body.tags;
     const tags = Array.isArray(rawTags)
@@ -71,7 +80,6 @@ exports.uploadVideo = async (req, res) => {
       ? rawTags.split(',').map((t) => t.trim()).filter(Boolean).slice(0, 10)
       : [];
 
-    // Scheduled publishing
     const scheduledAt = req.body.scheduledAt ? new Date(req.body.scheduledAt) : null;
     const isScheduled = scheduledAt && scheduledAt > new Date();
 
@@ -79,8 +87,8 @@ exports.uploadVideo = async (req, res) => {
       title: title.trim(),
       description: description?.trim() || '',
       owner: req.user.id,
-      filePath: videoFile.path,
-      fileUrl,
+      filePath: videoResult.public_id,
+      fileUrl: videoResult.secure_url,
       ...(thumbnailUrl && { thumbnailUrl }),
       status: isScheduled ? 'scheduled' : 'ready',
       ...(isScheduled && { scheduledAt }),
@@ -90,7 +98,6 @@ exports.uploadVideo = async (req, res) => {
 
     await video.populate('owner', 'name');
 
-    // Notify subscribers only for immediately published videos
     if (!isScheduled) {
       const subs = await Subscription.find({ creator: req.user.id }).select('subscriber');
       if (subs.length > 0) {
@@ -106,13 +113,11 @@ exports.uploadVideo = async (req, res) => {
 
     res.status(201).json({ success: true, data: video });
   } catch (err) {
-    if (req.files?.['video']?.[0]) fs.unlinkSync(req.files['video'][0].path);
-    if (req.files?.['thumbnail']?.[0]) fs.unlinkSync(req.files['thumbnail'][0].path);
     res.status(500).json({ success: false, error: { message: err.message } });
   }
 };
 
-// GET /api/v1/videos  (public — supports ?q=&category=&tag=&duration=&dateFrom=&sortBy=)
+// GET /api/v1/videos
 exports.getVideos = async (req, res) => {
   try {
     const page = Math.max(1, parseInt(req.query.page) || 1);
@@ -121,10 +126,7 @@ exports.getVideos = async (req, res) => {
 
     const filter = { status: 'ready', $and: [{ $or: [{ scheduledAt: null }, { scheduledAt: { $lte: new Date() } }] }] };
 
-    // Exclude the requesting user's own videos (for home/browse feed)
-    if (req.query.excludeOwner) {
-      filter.$and.push({ owner: { $ne: req.query.excludeOwner } });
-    }
+    if (req.query.excludeOwner) filter.$and.push({ owner: { $ne: req.query.excludeOwner } });
 
     if (req.query.q) {
       const safe = req.query.q.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -149,16 +151,13 @@ exports.getVideos = async (req, res) => {
       Video.countDocuments(filter),
     ]);
 
-    res.json({
-      success: true,
-      data: { videos, total, page, totalPages: Math.ceil(total / limit) },
-    });
+    res.json({ success: true, data: { videos, total, page, totalPages: Math.ceil(total / limit) } });
   } catch (err) {
     res.status(500).json({ success: false, error: { message: err.message } });
   }
 };
 
-// GET /api/v1/videos/trending  (public)
+// GET /api/v1/videos/trending
 exports.getTrending = async (req, res) => {
   try {
     const videos = await Video.aggregate([
@@ -177,7 +176,7 @@ exports.getTrending = async (req, res) => {
   }
 };
 
-// GET /api/v1/videos/:id/related  (public)
+// GET /api/v1/videos/:id/related
 exports.getRelatedVideos = async (req, res) => {
   try {
     const video = await Video.findById(req.params.id).select('tags category owner');
@@ -191,9 +190,7 @@ exports.getRelatedVideos = async (req, res) => {
         { category: video.category },
         { owner: video.owner },
       ],
-    })
-      .limit(8)
-      .populate('owner', 'name');
+    }).limit(8).populate('owner', 'name');
 
     res.json({ success: true, data: related });
   } catch (err) {
@@ -201,16 +198,14 @@ exports.getRelatedVideos = async (req, res) => {
   }
 };
 
-// GET /api/v1/videos/:id  (public — stream or direct URL)
+// GET /api/v1/videos/:id
 exports.getVideo = async (req, res) => {
   try {
     const video = await Video.findById(req.params.id).populate('owner', 'name');
-    if (!video) {
-      return res.status(404).json({ success: false, error: { message: 'Video not found' } });
-    }
+    if (!video) return res.status(404).json({ success: false, error: { message: 'Video not found' } });
+
     await Video.findByIdAndUpdate(req.params.id, { $inc: { views: 1 } });
 
-    // Record watch history for authenticated users
     const userId = req.user?.id;
     if (userId) {
       await WatchHistory.findOneAndUpdate(
@@ -219,6 +214,7 @@ exports.getVideo = async (req, res) => {
         { upsert: true }
       );
     }
+
     const videoObj = video.toObject();
     videoObj.likesCount = video.likes.length;
     videoObj.dislikesCount = video.dislikes.length;
@@ -230,7 +226,7 @@ exports.getVideo = async (req, res) => {
   }
 };
 
-// GET /api/v1/videos/liked  (protected — current user's liked videos)
+// GET /api/v1/videos/liked
 exports.getLikedVideos = async (req, res) => {
   try {
     const page = Math.max(1, parseInt(req.query.page) || 1);
@@ -238,36 +234,27 @@ exports.getLikedVideos = async (req, res) => {
     const skip = (page - 1) * limit;
 
     const [videos, total] = await Promise.all([
-      Video.find({ likes: req.user.id, status: 'ready' })
-        .sort({ createdAt: -1 })
-        .skip(skip)
-        .limit(limit)
-        .populate('owner', 'name'),
+      Video.find({ likes: req.user.id, status: 'ready' }).sort({ createdAt: -1 }).skip(skip).limit(limit).populate('owner', 'name'),
       Video.countDocuments({ likes: req.user.id, status: 'ready' }),
     ]);
 
-    res.json({
-      success: true,
-      data: { videos, total, page, totalPages: Math.ceil(total / limit) },
-    });
+    res.json({ success: true, data: { videos, total, page, totalPages: Math.ceil(total / limit) } });
   } catch (err) {
     res.status(500).json({ success: false, error: { message: err.message } });
   }
 };
 
-// GET /api/v1/users/:userId/videos  (public — user's uploaded videos)
+// GET /api/v1/users/:userId/videos
 exports.getUserVideos = async (req, res) => {
   try {
-    const videos = await Video.find({ owner: req.params.userId, status: 'ready' })
-      .sort({ createdAt: -1 })
-      .populate('owner', 'name');
+    const videos = await Video.find({ owner: req.params.userId, status: 'ready' }).sort({ createdAt: -1 }).populate('owner', 'name');
     res.json({ success: true, data: videos });
   } catch (err) {
     res.status(500).json({ success: false, error: { message: err.message } });
   }
 };
 
-// POST /api/v1/videos/:id/like  (toggle like)
+// POST /api/v1/videos/:id/like
 exports.likeVideo = async (req, res) => {
   try {
     const video = await Video.findById(req.params.id);
@@ -288,7 +275,7 @@ exports.likeVideo = async (req, res) => {
   }
 };
 
-// POST /api/v1/videos/:id/dislike  (toggle dislike)
+// POST /api/v1/videos/:id/dislike
 exports.dislikeVideo = async (req, res) => {
   try {
     const video = await Video.findById(req.params.id);
@@ -309,7 +296,7 @@ exports.dislikeVideo = async (req, res) => {
   }
 };
 
-// PUT /api/v1/videos/:id  (owner only)
+// PUT /api/v1/videos/:id
 exports.updateVideo = async (req, res) => {
   try {
     const video = await Video.findById(req.params.id);
@@ -328,16 +315,9 @@ exports.updateVideo = async (req, res) => {
   }
 };
 
-// POST /api/v1/videos/:id/thumbnail  (owner only — replace thumbnail)
-const thumbnailStorage = multer.diskStorage({
-  destination: (req, file, cb) => cb(null, uploadDir),
-  filename: (req, file, cb) => {
-    const ext = path.extname(file.originalname) || '.jpg';
-    cb(null, `thumb-${uuidv4()}${ext}`);
-  },
-});
+// POST /api/v1/videos/:id/thumbnail
 const thumbnailUploadMiddleware = multer({
-  storage: thumbnailStorage,
+  storage: multer.memoryStorage(),
   fileFilter: (req, file, cb) => {
     if (file.mimetype.startsWith('image/')) cb(null, true);
     else cb(new Error('Only image files allowed'), false);
@@ -356,34 +336,33 @@ exports.uploadThumbnail = async (req, res) => {
     }
     if (!req.file) return res.status(400).json({ success: false, error: { message: 'Image file required' } });
 
-    // Delete old thumbnail if local
-    if (video.thumbnailUrl && video.thumbnailUrl.includes('/uploads/')) {
-      const oldPath = path.join(uploadDir, path.basename(video.thumbnailUrl));
-      if (fs.existsSync(oldPath)) fs.unlinkSync(oldPath);
-    }
+    const result = await uploadToCloudinary(req.file.buffer, {
+      resource_type: 'image',
+      folder: 'streamforge/thumbnails',
+    });
 
-    const baseUrl = process.env.BASE_URL || `http://localhost:${process.env.PORT || 5000}`;
-    video.thumbnailUrl = `${baseUrl}/uploads/${req.file.filename}`;
+    video.thumbnailUrl = result.secure_url;
     await video.save();
     res.json({ success: true, data: { thumbnailUrl: video.thumbnailUrl } });
   } catch (err) {
-    if (req.file) fs.unlinkSync(req.file.path);
     res.status(500).json({ success: false, error: { message: err.message } });
   }
 };
 
-// DELETE /api/v1/videos/:id  (owner only)
+// DELETE /api/v1/videos/:id
 exports.deleteVideo = async (req, res) => {
   try {
     const video = await Video.findById(req.params.id);
-    if (!video) {
-      return res.status(404).json({ success: false, error: { message: 'Video not found' } });
-    }
+    if (!video) return res.status(404).json({ success: false, error: { message: 'Video not found' } });
     if (video.owner.toString() !== req.user.id.toString()) {
       return res.status(403).json({ success: false, error: { message: 'Access denied' } });
     }
-    // Delete file from disk
-    if (fs.existsSync(video.filePath)) fs.unlinkSync(video.filePath);
+
+    // Delete from Cloudinary
+    if (video.filePath) {
+      await cloudinary.uploader.destroy(video.filePath, { resource_type: 'video' }).catch(() => {});
+    }
+
     await video.deleteOne();
     res.status(204).send();
   } catch (err) {
