@@ -48,6 +48,9 @@ app.use('/api/v1/memberships', membershipRoutes);
 app.use('/api/v1/livestreams', livestreamRoutes);
 app.use('/api/v1/playlists', playlistRoutes);
 
+// Root
+app.get('/', (req, res) => res.json({ name: 'StreamForge API', version: 'v1', status: 'running', docs: '/api/v1/health' }));
+
 // Health check
 app.get('/api/v1/health', (req, res) => res.json({ status: 'ok', timestamp: new Date() }));
 
