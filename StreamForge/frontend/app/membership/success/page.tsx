@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 
@@ -17,7 +17,7 @@ const PARTICLES = [
   { color: 'bg-indigo-300', size: 'w-4 h-4', top: '85%', left: '30%', delay: '0.4s', duration: '2.9s' },
 ];
 
-export default function MembershipSuccessPage() {
+function MembershipSuccessContent() {
   const searchParams = useSearchParams();
   const sessionId = searchParams.get('session_id');
   const [visible, setVisible] = useState(false);
@@ -76,5 +76,13 @@ export default function MembershipSuccessPage() {
         )}
       </div>
     </div>
+  );
+}
+
+export default function MembershipSuccessPage() {
+  return (
+    <Suspense>
+      <MembershipSuccessContent />
+    </Suspense>
   );
 }
